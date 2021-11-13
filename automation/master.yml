@@ -1,0 +1,23 @@
+# ---
+# # Local VM should orchestrate cloud infrastructure
+# # cloud, k8smaster, k8sworker are groups created dynamically by cloud-orchestrator role
+# # they refer to both EC2 instances, the first EC2 instance, and the second EC2 instance respectively
+- hosts: localvm
+  remote_user: vagrant
+  become: true
+  gather_facts: true
+  pre_tasks:
+    # set up the local VM with apt packages and python requirements before doing anything else
+    - name: Set up master playbook
+      import_tasks: setup-master.yml
+  roles:
+    - cloud-orchestrator
+
+# Set up couchbase on all created EC2 instances in the dynamic in-memory "cloud" group created by step 1
+- hosts: cloud
+  become: yes
+  remote_user: ubuntu
+  gather_facts: yes
+  roles:
+    - couchbase-node
+...

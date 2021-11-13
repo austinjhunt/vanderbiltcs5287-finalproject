@@ -1,0 +1,323 @@
+- name: Create a VPC
+  become: false
+  environment: "{{ env_vars }}"
+  amazon.aws.ec2_vpc_net:
+    name: cs5287final_vpc
+    cidr_block: 10.10.0.0/16
+    region: us-east-1
+    state: present
+    aws_access_key: "{{ aws_access_key_id.stdout }}"
+    aws_secret_key: "{{ aws_secret_access_key.stdout }}"
+  register: cs5287final_vpc
+
+- name: Create an Internet Gateway and attach to VPC
+  become: false
+  environment: "{{ env_vars}} "
+  community.aws.ec2_vpc_igw:
+    aws_access_key: "{{ aws_access_key_id.stdout }}"
+    aws_secret_key: "{{ aws_secret_access_key.stdout }}"
+    vpc_id: "{{ cs5287final_vpc.vpc.id }}"
+    state: present
+    region: us-east-1
+    tags:
+      app: cs5287final
+  register: cs5287final_internet_gateway
+
+- name: Create a VPC Subnet
+  become: false
+  environment: "{{ env_vars }}"
+  amazon.aws.ec2_vpc_subnet:
+    cidr: 10.10.2.0/24
+    region: us-east-1
+    vpc_id: "{{ cs5287final_vpc.vpc.id }}"
+    state: present
+    tags:
+      name: cs5287final_vpc_subnet
+    aws_access_key: "{{ aws_access_key_id.stdout }}"
+    aws_secret_key: "{{ aws_secret_access_key.stdout }}"
+  register: cs5287final_vpc_subnet
+
+- name: Create a public route table for VPC Subnet to allow internet access
+  become: false
+  environment: "{{ env_vars }}"
+  community.aws.ec2_vpc_route_table:
+    aws_access_key: "{{ aws_access_key_id.stdout }}"
+    aws_secret_key: "{{ aws_secret_access_key.stdout }}"
+    vpc_id: "{{ cs5287final_vpc.vpc.id }}"
+    region: us-east-1
+    state: present
+    tags:
+      Name: cs5287final_public_route_table
+    subnets:
+      - "{{ cs5287final_vpc_subnet.subnet.id }}"
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ cs5287final_internet_gateway.gateway_id }}"
+  register: public_route_table
+
+- name: Create a security group to allow host reachability
+  become: false
+  environment: "{{ env_vars }}"
+  amazon.aws.ec2_group:
+    aws_access_key: "{{ aws_access_key_id.stdout }}"
+    aws_secret_key: "{{ aws_secret_access_key.stdout }}"
+    description: security group for kafka, epmd, couchdb, zookeeper, ssh, k8s
+    name: cs5287final-security-group
+    vpc_id: "{{ cs5287final_vpc.vpc.id }}"
+    rules:
+      - proto: tcp
+        ports:
+        - 22
+        cidr_ip: 0.0.0.0/0
+        rule_desc: ssh
+      - proto: tcp
+        ports:
+        - 8091-8097
+        - 4369
+        - 9100-9105
+        - 9110-9118
+        - 9120-9122
+        - 9130
+        - 9140
+        - 9999
+        - 11206-11211
+        - 21100
+        - 18091-18097
+        - 19102
+        - 19130
+        - 21150
+        cidr_ip: 0.0.0.0/0
+        rule_desc: couchbase (node-node and client-node, encrypted and unencrypted)
+    state: present
+    region: us-east-1
+
+- name: Create EC2 Instance 1
+  become: false
+  environment: "{{ env_vars }}"
+  community.aws.ec2_instance:
+    aws_access_key: "{{ aws_access_key_id.stdout }}"
+    aws_secret_key: "{{ aws_secret_access_key.stdout }}"
+    # when I initially tried it, with the original settings from austin, it will identify some existing instance
+    # then it will try to use the existing instance, since I terminate these old instance (the one created in prior runs)
+    # it will throw out errors, not exactly sure how these filters will work, but have to be careful with these
+    filters:
+      "tag:app": cs5287final
+      "tag:Name": 5287cloudvm1
+    name: 5287cloudvm1
+    tags:
+      # Add tags so you can start / stop by tags. Running twice should not create duplicates.
+      app: cs5287final
+    key_name: aws-keypair3
+    instance_type: t2.medium
+    vpc_subnet_id: "{{ cs5287final_vpc_subnet.subnet.id }}"
+    network:
+      assign_public_ip: yes
+      delete_on_termination: yes
+    region: us-east-1
+    # Ubuntu 20.04 LTS AMI
+    image_id: ami-09e67e426f25ce0d7
+    state: running
+    # Wait for the instances to reach their desired states before returning.
+    # Does not wait for SSH, see the 'wait_for_connection' example for details.
+    wait: yes
+    # Security group to set up appropriate firewall rules
+    security_group: cs5287final-security-group
+  register: ec2_1
+
+- name: Create EC2 Instance 2
+  become: false
+  environment: "{{ env_vars }}"
+  community.aws.ec2_instance:
+    aws_access_key: "{{ aws_access_key_id.stdout }}"
+    aws_secret_key: "{{ aws_secret_access_key.stdout }}"
+    filters:
+      "tag:app": cs5287final
+      "tag:Name": 5287cloudvm2
+    name: 5287cloudvm2
+    tags:
+      # Add tags so you can start / stop by tags. Running twice should not create duplicates.
+      app: cs5287final
+    key_name: aws-keypair3
+    instance_type: t2.medium
+    vpc_subnet_id: "{{ cs5287final_vpc_subnet.subnet.id }}"
+    network:
+      assign_public_ip: yes
+      delete_on_termination: yes
+    region: us-east-1
+    # Ubuntu 20.04 LTS AMI
+    image_id: ami-09e67e426f25ce0d7
+    state: running
+    # Wait for the instances to reach their desired states before returning.
+    # Does not wait for SSH, see the 'wait_for_connection' example for details.
+    wait: yes
+    # Security group to set up appropriate firewall rules
+    security_group: cs5287final-security-group
+  register: ec2_2
+
+
+- name: Create EC2 Instance 3
+  become: false
+  environment: "{{ env_vars }}"
+  community.aws.ec2_instance:
+    aws_access_key: "{{ aws_access_key_id.stdout }}"
+    aws_secret_key: "{{ aws_secret_access_key.stdout }}"
+    filters:
+      "tag:app": cs5287final
+      "tag:Name": 5287cloudvm3
+    name: 5287cloudvm3
+    tags:
+      # Add tags so you can start / stop by tags. Running twice should not create duplicates.
+      app: cs5287final
+    key_name: aws-keypair3
+    instance_type: t2.medium
+    vpc_subnet_id: "{{ cs5287final_vpc_subnet.subnet.id }}"
+    network:
+      assign_public_ip: yes
+      delete_on_termination: yes
+    region: us-east-1
+    # Ubuntu 20.04 LTS AMI
+    image_id: ami-09e67e426f25ce0d7
+    state: running
+    # Wait for the instances to reach their desired states before returning.
+    # Does not wait for SSH, see the 'wait_for_connection' example for details.
+    wait: yes
+    # Security group to set up appropriate firewall rules
+    security_group: cs5287final-security-group
+  register: ec2_3
+
+- name: Create EC2 Instance 4
+  become: false
+  environment: "{{ env_vars }}"
+  community.aws.ec2_instance:
+    aws_access_key: "{{ aws_access_key_id.stdout }}"
+    aws_secret_key: "{{ aws_secret_access_key.stdout }}"
+    filters:
+      "tag:app": cs5287final
+      "tag:Name": 5287cloudvm4
+    name: 5287cloudvm4
+    tags:
+      # Add tags so you can start / stop by tags. Running twice should not create duplicates.
+      app: cs5287final
+    key_name: aws-keypair3
+    instance_type: t2.medium
+    vpc_subnet_id: "{{ cs5287final_vpc_subnet.subnet.id }}"
+    network:
+      assign_public_ip: yes
+      delete_on_termination: yes
+    region: us-east-1
+    # Ubuntu 20.04 LTS AMI
+    image_id: ami-09e67e426f25ce0d7
+    state: running
+    # Wait for the instances to reach their desired states before returning.
+    # Does not wait for SSH, see the 'wait_for_connection' example for details.
+    wait: yes
+    # Security group to set up appropriate firewall rules
+    security_group: cs5287final-security-group
+  register: ec2_4
+
+
+- name: Create EC2 Instance 5
+  become: false
+  environment: "{{ env_vars }}"
+  community.aws.ec2_instance:
+    aws_access_key: "{{ aws_access_key_id.stdout }}"
+    aws_secret_key: "{{ aws_secret_access_key.stdout }}"
+    filters:
+      "tag:app": cs5287final
+      "tag:Name": 5287cloudvm5
+    name: 5287cloudvm5
+    tags:
+      # Add tags so you can start / stop by tags. Running twice should not create duplicates.
+      app: cs5287final
+    key_name: aws-keypair3
+    instance_type: t2.medium
+    vpc_subnet_id: "{{ cs5287final_vpc_subnet.subnet.id }}"
+    network:
+      assign_public_ip: yes
+      delete_on_termination: yes
+    region: us-east-1
+    # Ubuntu 20.04 LTS AMI
+    image_id: ami-09e67e426f25ce0d7
+    state: running
+    # Wait for the instances to reach their desired states before returning.
+    # Does not wait for SSH, see the 'wait_for_connection' example for details.
+    wait: yes
+    # Security group to set up appropriate firewall rules
+    security_group: cs5287final-security-group
+  register: ec2_5
+
+
+- name: Wait for SSH to come up on VM 1 # SSH needs to work for rest of playbook to continue
+  wait_for:
+    host: "{{ item.public_ip_address }}"
+    port: 22
+    state: started
+  with_items: "{{ ec2_1.instances }}"
+
+- name: Wait for SSH to come up on VM 2 # SSH needs to work for rest of playbook to continue
+  wait_for:
+    host: "{{ item.public_ip_address }}"
+    port: 22
+    state: started
+  with_items: "{{ ec2_2.instances }}"
+
+- name: Wait for SSH to come up on VM 3 # SSH needs to work for rest of playbook to continue
+  wait_for:
+    host: "{{ item.public_ip_address }}"
+    port: 22
+    state: started
+  with_items: "{{ ec2_3.instances }}"
+
+- name: Wait for SSH to come up on VM 4 # SSH needs to work for rest of playbook to continue
+  wait_for:
+    host: "{{ item.public_ip_address }}"
+    port: 22
+    state: started
+  with_items: "{{ ec2_4.instances }}"
+
+- name: Wait for SSH to come up on VM 5 # SSH needs to work for rest of playbook to continue
+  wait_for:
+    host: "{{ item.public_ip_address }}"
+    port: 22
+    state: started
+  with_items: "{{ ec2_5.instances }}"
+
+- name: Add EC2 instance 1 to group "cloud"
+  add_host:
+    name: "{{ item.public_ip_address }}"
+    ansible_ssh_private_key_file: "{{ playbook_dir }}/.ssh/aws-keypair3.pem"
+    groups:
+      - cloud
+  with_items: "{{ ec2_1.instances }}"
+
+- name: Add EC2 instance 2 to group "cloud"
+  add_host:
+    name: "{{ item.public_ip_address }}"
+    ansible_ssh_private_key_file: "{{ playbook_dir }}/.ssh/aws-keypair3.pem"
+    groups:
+      - cloud
+  with_items: "{{ ec2_2.instances }}"
+
+- name: Add EC2 instance 3 to group "cloud"
+  add_host:
+    name: "{{ item.public_ip_address }}"
+    ansible_ssh_private_key_file: "{{ playbook_dir }}/.ssh/aws-keypair3.pem"
+    groups:
+      - cloud
+  with_items: "{{ ec2_3.instances }}"
+
+- name: Add EC2 instance 4 to group "cloud"
+  add_host:
+    name: "{{ item.public_ip_address }}"
+    ansible_ssh_private_key_file: "{{ playbook_dir }}/.ssh/aws-keypair3.pem"
+    groups:
+      - cloud
+  with_items: "{{ ec2_4.instances }}"
+
+- name: Add EC2 instance 5 to group "cloud"
+  add_host:
+    name: "{{ item.public_ip_address }}"
+    ansible_ssh_private_key_file: "{{ playbook_dir }}/.ssh/aws-keypair3.pem"
+    groups:
+      - cloud
+  with_items: "{{ ec2_5.instances }}"

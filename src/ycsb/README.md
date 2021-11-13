@@ -1,0 +1,2 @@
+# YCSB ([Yahoo! Cloud Serving Benchmark ](https://github.com/brianfrankcooper/YCSB))
+This is an open-source specification and program suite for evaluating retrieval and maintenance capabilities of computer programs. It is often used to compare relative performance of NoSQL database management systems. We use YCSB in this project to run performance analyses against Couchbase.

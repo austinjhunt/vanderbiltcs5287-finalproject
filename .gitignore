@@ -1,0 +1,8 @@
+venv
+.env
+
+couchbase
+random_docs
+*.pem
+setup-env.sh
+start-dev.sh

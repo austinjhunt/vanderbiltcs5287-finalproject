@@ -1,0 +1,32 @@
+# Orchestrates the creation of two cloud VMs in AWS EC2
+- name: Set up environment variables to work with AWS EC2
+  shell: . /vagrant/setup-env.sh && env
+  register: env_file_result
+
+- name: Parse environment
+  set_fact:
+    env_vars: "{{ ('{' + env_file_result.stdout_lines | map('regex_replace', '([^=]*)=(.*)', '\"\\1\": \"\\2\"') | join(',') + '}') | from_json }}"
+
+- name: Set AWS Secret Access Key
+  command: echo $AWS_SECRET_ACCESS_KEY
+  environment: "{{ env_vars }}"
+  register: aws_secret_access_key
+
+- name: Set AWS Access Key ID
+  command: echo $AWS_ACCESS_KEY_ID
+  environment: "{{ env_vars }}"
+  register: aws_access_key_id
+
+
+- name: Stop EC2 instances
+  become: false
+  environment: "{{ env_vars }}"
+  community.aws.ec2_instance:
+    aws_access_key: "{{ aws_access_key_id.stdout }}"
+    aws_secret_key: "{{ aws_secret_access_key.stdout }}"
+    filters:
+      "tag:app": cs5287final
+      instance-state-name: running
+    state: stopped
+    wait: yes
+    region: us-east-1

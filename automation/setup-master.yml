@@ -1,0 +1,42 @@
+# Set up environment variables
+- name: Set up environment variables to work with AWS EC2
+  shell: . /vagrant/setup-env.sh && env
+  register: env_file_result
+
+- name: Parse environment
+  set_fact:
+    env_vars: "{{ ('{' + env_file_result.stdout_lines | map('regex_replace', '([^=]*)=(.*)', '\"\\1\": \"\\2\"') | join(',') + '}') | from_json }}"
+
+- name: Set AWS Secret Access Key
+  command: echo $AWS_SECRET_ACCESS_KEY
+  environment: "{{ env_vars }}"
+  register: aws_secret_access_key
+
+- name: Set AWS Access Key ID
+  command: echo $AWS_ACCESS_KEY_ID
+  environment: "{{ env_vars }}"
+  register: aws_access_key_id
+
+# Tasks to set up local VM with apt packages and Python requirements
+- name: Update and upgrade apt packages
+  apt:
+    upgrade: "yes"
+    update_cache: "yes"
+    cache_valid_time: 86400 # one day
+
+- name: install apt packages
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - acl
+    - python3-pip
+    - ansible
+    - build-essential
+    - libssl-dev
+    - libffi-dev
+    - python3-dev
+
+- name: install python requirements in requirements.txt
+  pip:
+    requirements: /vagrant/requirements.txt
