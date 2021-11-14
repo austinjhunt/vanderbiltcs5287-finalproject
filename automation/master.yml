@@ -20,4 +20,14 @@
   gather_facts: yes
   roles:
     - couchbase-node
+
+# Set up ycsb on the local VM created by Vagrant
+# since we are going to install on the local VM created by Vagrant, the connection needs to be ansible_connection=ssh
+# an additional host is created in the hosts.int file
+- hosts: localvm_ssh
+  become: yes
+  remote_user: vagrant
+  gather_facts: yes
+  roles:
+    - ycsb
 ...

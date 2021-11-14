@@ -1,0 +1,73 @@
+---
+# Install Java and maven as they are needed by the YCSB
+- name: Update and upgrade apt packages
+  apt:
+    upgrade: "yes"
+    update_cache: "yes"
+    cache_valid_time: 86400 # one day
+- name: install apt packages
+  apt:
+    name: "{{ item }}"
+    state: present
+    loop:
+      - default-jdk
+      - maven
+
+# install python2 as ycsb is old and requires python2
+# refrence: https://linuxconfig.org/install-python-2-on-ubuntu-20-04-focal-fossa-linux
+- name: install python2
+  apt:
+    name: python2
+    state: present
+# ubuntu has python3 as default, so we need to switch python versions
+# reference: https://linuxconfig.org/ubuntu-20-04-python-version-switch-manager
+sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
+- name: switch to python2 as default python
+  commnad: update-alternatives --install /usr/bin/python python /usr/bin/python2 1
+
+
+# download and install YCSB
+- name: Download the package
+  command: curl -O --location https://github.com/brianfrankcooper/YCSB/releases/download/0.17.0/ycsb-0.17.0.tar.gz
+- name: Install the meta package
+  command: tar xfvz ycsb-0.17.0.tar.gz
+
+# ##########################
+# #          NOTE          #
+# ##########################
+# # a known issue with https://github.com/brianfrankcooper/YCSB/issues/1316
+# # Looks like the connection string from 5 onwards requires the username and password for the cluster
+# # however, the options does not have username and password option
+# # what was recommneded is that Make the bucket name the same as the user, or the other way around and then execute
+# # so what I did was to create a bucket called test and a user called test as well
+
+# ##########################
+# #          NOTE          #
+# ##########################
+# # the data has to be there in order for the operations to be successful, so firt load the data then run 
+# # with load, it inserts the data into the bucket
+# # with run, it conducts read, update operations.
+
+# ##########################
+# #          NOTE          #
+# ##########################
+# # when running the run command, it will use certain ports which needs to be specified as part of the secuirty group
+# # better to enable all ports in https://docs.couchbase.com/server/current/install/install-ports.html
+
+# # first run the load command 
+# bin/ycsb load couchbase2 -s -P workloads/workloada -p "couchbase.host=52.204.4.221" -p "couchbase.password=123456" -p "couchbase.bucket=test"
+# # then run the run command
+# bin/ycsb run couchbase2 -s -P workloads/workloada -p "couchbase.host=52.204.4.221" -p "couchbase.password=123456" -p "couchbase.bucket=test"
+
+# ##########################
+# #     Remaining          #
+# ##########################
+# # how to adjust the work
+# # how to adjust the size of the file
+# # how to adjust the number of operation and documents
+# # how to run more advanced operations?
+
+# bin/ycsb load couchbase2 -s -P workloads/workloada -p "couchbase.host=34.229.40.203" -p "couchbase.password=123456" -p "couchbase.bucket=test3"
+
+# bin/ycsb run couchbase2 -s -P workloads/workloada -p "couchbase.host=34.229.40.203" -p "couchbase.password=123456" -p "couchbase.bucket=test3" 
+...
