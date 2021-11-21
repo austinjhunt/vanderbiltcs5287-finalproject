@@ -174,7 +174,6 @@ class Driver:
                         output = self._ycsb(
                             workload=workload,
                             host=self.cluster_manager.get_leader_address(),
-                            #url=self.cluster_manager.get_cluster_url(protocol='couchbase'),
                             bucket=bucket_size_label,
                             password=bucket_size_label,
                             persistTo=0,
