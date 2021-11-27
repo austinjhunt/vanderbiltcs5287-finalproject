@@ -357,15 +357,8 @@ if __name__ == "__main__":
         # Analyze cluster size impact on performance
         driver.run_test_framework()
     elif args.ycsb:
-        # Analyze cluster size impact on performance
+        # Run Yahoo! Cloud Service Benchmark framework
         driver.run_ycsb()
-
-
-        # Analyze multidimensional service scaling impact on performance;
-        # this uses ALL hosts (MAX_CLUSTER_SIZE) for each of the service layouts.
-        # for service_layout in clusterman.get_service_layouts():
-        #     clusterman.setup_cluster_with_service_layout(
-        #         service_layout=service_layout, cluster_size=cluster_size)
 
     if args.plot:
         analyzer = Analyzer(verbose=args.verbose)
