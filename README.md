@@ -1,6 +1,8 @@
 # An Automated Testing Framework for Evaluating [Couchbase](https://www.couchbase.com/) as a Distributed Datastore
 ## An Extension of the [Vanderbilt CS 6381 Final Project]([http](https://github.com/austinjhunt/vanderbiltcs6381-finalproject))
-This project is a Python-driven evaluation of [Couchbase](https://www.couchbase.com/) as a distributed datastore, completed as a final project for CS 6381 (Distributed Systems) at Vanderbilt University in Summer 2021. Specifically, we test and analyze Couchbase along a variety of metrics in a virtualized network environment created with [Mininet](http://mininet.org/), including:
+This project is a Python-driven evaluation of [Couchbase](https://www.couchbase.com/) as a distributed datastore, completed in part as a final project for CS 6381 (Distributed Systems) at Vanderbilt University in Summer 2021 and expanded in scope as a final project for CS 5287 (Principles of Cloud Computing) at Vanderbilt University in Fall 2021.
+
+Specifically, we test and analyze Couchbase along a variety of metrics in an auto-provisioned cloud infrastructure environment using [AWS EC2](https://aws.amazon.com/ec2/); we analyze metrics like:
 - Cluster size impact on latency of read/write/delete operations, specifically with co-located services (same services on every node); how does adding a new node affect latency of operations?
 - [Multidimensional service scaling](https://www.couchbase.com/multi-dimensional-scalability-overview) impact on read/write/delete operations; how does scaling out a query service by one additional node affect query latency?
   - Couchbase offers multi-dimensional scaling of services, meaning that you can scale specific services independently based on what your application needs are. For example, if you are dealing with massive amounts of data, you may want to independently scale out your data service more so than the other services. [These are the main services within a Couchbase cluster.](https://docs.couchbase.com/server/current/learn/services-and-indexes/services/services.html).
@@ -17,16 +19,31 @@ This project is a Python-driven evaluation of [Couchbase](https://www.couchbase.
       - Capture average write latency
       - Capture average delete latency
 - How does network partitioning/node failure affect latency of cluster metadata changes? Answer by:
-  - Capture average latency of metadata change command for a fully working cluster (without changing cluster size, change some other part of config, e.g. permissions, service layout, etc.)
+  - Capture tail latency of metadata change command for a fully working cluster (without changing cluster size, change some other part of config, e.g. permissions, service layout, etc.)
   - Kill some number of nodes less than quorum, capture average latency again
   - Kill some number of nodes >= quorum, capture average latency again - this should not succeed / commit until quorum recovers.
+- How does dataset size (using YCSB) affect tail latency of different data operations (read/write)?
+- How does [request distribution](https://stackoverflow.com/questions/42767138/zipfian-vs-uniform-whats-the-difference-between-these-two-ycsb-distribution) (using YCSB) impact tail latency of data operations?
+  - We'll be looking at **uniform** and **zipfian** request distributions, defined respectively as:
+    - Uniform: each row has an equal probability to be read
+    - Zipfian: some rows have more probability to be targeted by reads or scans; those rows are called "hot set" or "hot spot" and represent popular data, for instance popular threads of a forum.
+- How does the ratio between read and write requests (using YCSB) affect overall tail latency of database operations?
 
 ## Tools Used
-This project uses the [Python 3 SDK for Couchbase](https://docs.couchbase.com/python-sdk/current/hello-world/start-using-sdk.html) to programmatically adjust cluster configuration within the test scaffolding. [This article](https://docs.couchbase.com/python-sdk/2.5/managing-clusters.html) explains how the SDK can be used for cluster configuration management. It also uses the [Couchbase CLI](https://docs.couchbase.com/server/current/cli/cli-intro.html) to do things that cannot be done with the Python3 SDK, like much of the [Cluster Architecture Management (ClusterManager.py)](src/lib/ClusterManager.py).
+- This project uses the [Python 3 SDK for Couchbase](https://docs.couchbase.com/python-sdk/current/hello-world/start-using-sdk.html) to programmatically adjust cluster configuration within the test scaffolding. [This article](https://docs.couchbase.com/python-sdk/2.5/managing-clusters.html) explains how the SDK can be used for cluster configuration management.
+- It also uses the [Couchbase CLI](https://docs.couchbase.com/server/current/cli/cli-intro.html) to do things that cannot be done with the Python3 SDK, like much of the [Cluster Architecture Management (ClusterManager.py)](src/lib/ClusterManager.py).
+- It uses a subset of the [Yahoo! Cloud Serving Benchmark](https://github.com/brianfrankcooper/YCSB/tree/master/couchbase2) project for automated load testing against the Couchbase cluster.
+- It uses [Vagrant by HashiCorp](https://www.vagrantup.com/) for quickly and easily spinning up a local VirtualBox VM (using the `ubuntu/focal64` that can be used as a controller for remote cloud VMs
+- It uses [Ansible](https://docs.ansible.com/) for the automated provisioning and configuration of AWS EC2 infrastructure (i.e. EC2 instances)
 
 ## Automation
+While the [previous iteration of this project](https://github.com/austinjhunt/vanderbiltcs6381-finalproject) was mostly automated, it still required you to manually provision EC2 instances and provide their addresses to the framework before it could run. Now, we've adjusted the architecture using Vagrant and Ansible such that all you have to do is provide values of your AWS Secret Access Key and your AWS Access Key ID in a `setup-env.sh` script, and run `vagrant up --provision`. The provisioner for the Vagrant box is an Ansible Playbook that handles the automatic provisioning and configuration of a set of `Ubuntu 20.04` EC2 instances (particularly the installation of Couchbase), and then automatically kicks off the test framework.
 
-This is a fully automated framework, requiring only a few pre-requisites. In a nutshell, you provide the addresses of your EC2 instances, and the framework handles the installation of Couchbase as well as the creation of various cluster architectures using the power set of those hosts. Python is used for not only the data management [(DataManager.py)](src/lib/DataManager.py) via the provided Python 3 SDK, but also the management of the cluster architecture in order to eliminate the need for interacting manually with the Couchbase Web GUI. The framework writes out data during test execution, which is used afterward to generate various plots that reveal relationships between various variables (e.g. cluster size vs. operation latency and bucket size vs. operation latency).
+The framework uses the provisioned instances to automatically and iteratively create and tear down various Couchbase cluster architectures.
+
+Python is used for not only the data management [(DataManager.py)](src/lib/DataManager.py) via the provided Python 3 SDK, but also the management of the cluster architecture in order to eliminate the need for interacting manually with the Couchbase Web GUI. Note: since much of the cluster architecture management could not be done using the default Python 3 SDK, we created methods that "wrapped" the Couchbase CLI (which *could* manage cluster architecture) to make this a fully Pythonic project.
+
+The framework writes out data during test execution, which is used afterward to generate various plots that reveal relationships between the various variables we tune (e.g. cluster size vs. operation latency and bucket size vs. operation latency).
 
 ### Testing Approach
 #### Test Multidimensional Scaling Impact on Operation Latencies
@@ -106,6 +123,11 @@ vagrant up --provision
 This will create 5 EC2 instances (t2.medium) and install Couchbase on each of them automatically; it may take a little bit of time, so be patient.
 12.  Run the `setup.py` script: `python setup.py`
 13.  Run the setup script with `python setup.py -p`.  This script will set up a [src/lib/hosts.json](src/lib/hosts.json) file containing a map of the public and private IP addresses (paired) of each of your EC2 hosts in JSON format. The framework depends on this for automatic cluster management.
+
+
+## [YCSB (Yahoo! Cloud Serving Benchmark)](https://github.com/brianfrankcooper/YCSB)
+We use the [couchbase-related components of the YCSB project](https://github.com/brianfrankcooper/YCSB/tree/master/couchbase2) to run automated workloads against our created database. Using YCSB, we can fine tune variables like the ratio between read and update operations, request distributions, field counts, field sizes, and overall dataset sizes.
+For more information about YCSB, please read [this 2010 announcement from Yahoo! about the project.](https://research.yahoo.com/news/yahoo-cloud-serving-benchmark/)
 
 ## Running the Framework
 1. Navigate to the [src](src/__init__.py) directory
