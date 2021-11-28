@@ -31,6 +31,7 @@ class Analyzer:
             self.logger.debug('Debug mode enabled', extra=self.prefix )
         else:
             self.logger.setLevel(logging.INFO)
+
     def debug(self, msg):
         self.logger.debug(msg, extra=self.prefix)
 
@@ -466,3 +467,63 @@ class Analyzer:
                 self.generate_line_graphs_cluster_size_v_latency(stats, operation=op)
                 self.generate_line_graphs_bucket_size_v_latency(stats, operation=op)
                 self.generate_line_graph_durability_v_latency(stats,operation=op)
+
+    def file_lines_that_contain(self, string, fname):
+        try:
+            with open(fname, 'r') as fp:
+                return [line for line in fp if string in line]
+        except:
+            return []
+
+    def get_ycsb_stats(self):
+        """ Use the Raw measurement data from YCSB to generate a
+        dictionary of aggregated data """
+        ycsb_data_folder = os.path.join(os.path.dirname(
+            os.path.abspath(__file__)),'data','ycsb-results')
+
+        for data_file in os.listdir(ycsb_data_folder):
+            # data file name format:
+            # csz<CLUSTER_SIZE>-rc<RECORD_COUNT>-fc<FIELD_COUNT>-fl<FIELD_LENGTH_BYTES>-
+            # rd<REQUEST_DISTRIBUTION>-r<READ_PROPORTION>-u<UPDATE_PROPORTION>-
+            # s<SCAN_PROPORTION>-i<INSERT_PROPORTION>
+            param_value_pairs = data_file.split('-')
+            cluster_size = param_value_pairs[0].split('csz')[-1]
+            record_count = param_value_pairs[1].split('rc')[-1]
+            field_count = param_value_pairs[2].split('fc')[-1]
+            field_length = param_value_pairs[3].split('fl')[-1]
+            request_distribution = param_value_pairs[4].split('rd')[-1]
+            read_proportion = float(param_value_pairs[5].split('r')[-1])
+            update_proportion = float(param_value_pairs[6].split('u')[-1])
+            scan_proportion = float(param_value_pairs[7].split('s')[-1])
+            insert_proportion = float(param_value_pairs[8].split('i')[-1])
+
+            file_pointer = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                'data','ycsb-results', data_file)
+            for percentile in ['90', '95', '99', '99.9', '99.99']:
+                try:
+                    read_microseconds_tail_latency = int(self.file_lines_that_contain(
+                        f'[READ], p{percentile}'
+                    )[0].split(', ')[-1])
+                except Exception as e:
+                    self.error(e)
+                    pass
+                try:
+                    insert_microseconds_tail_latency = int(self.file_lines_that_contain(
+                        f'[INSERT], p{percentile}'
+                    )[0].split(', ')[-1])
+                except Exception as e:
+                    self.error(e)
+                    pass
+                try:
+                    update_microseconds_tail_latency = int(self.file_lines_that_contain(
+                        f'[UPDATE], p{percentile}'
+                    )[0].split(', ')[-1])
+                except Exception as e:
+                    self.error(e)
+                    pass
+
+
+if __name__ == "__main__":
+    analyzer = Analyzer(verbose=True)
+    analyzer.get_ycsb_stats()

@@ -76,10 +76,18 @@ class DataManager:
         self.info(response.json())
 
     def create_primary_index(self, bucket_name=""):
-        index_name = f'default_primary_index_{bucket_name.replace("-","_")}'
-        self.info(f'Creating primary index {index_name} on `{bucket_name}`')
-        response = self.cluster.query(f'CREATE PRIMARY INDEX {index_name} ON `{bucket_name}`')
-        self.info(response)
+        # index_name = f'default_primary_index_{bucket_name.replace("-","_")}'
+        index_name = ''
+        self.info(f'Creating primary index {index_name} on `{bucket_name}`;')
+        # response = self.cluster.query(f'CREATE PRIMARY INDEX {index_name} ON `{bucket_name}`')
+        #
+        # Fix error: Caused by: com.couchbase.client.core.CouchbaseException: N1qlQuery Error - {"msg":"No
+        # index available on keyspace `default`:`ycsb_test_bucket` that matches your query.
+        #  Use CREATE PRIMARY INDEX ON `default`:`ycsb_test_bucket` to create a primary index,
+        # or check that your expected index is online.","code":4000}
+        response = self.cluster.query(f'CREATE PRIMARY INDEX ON `default`:`{bucket_name}`')
+        for r in response.rows():
+            self.info(r)
         return response
 
     def create_bucket(self, bucket_name="", bucket_ram_quota_mb=1024, bucket_replicas=0):
@@ -164,6 +172,23 @@ class DataManager:
         if error and error != "None":
             self.error(error)
         self.debug(output)
+        return output
+
+    def drop_bucket(self, bucket_name=""):
+        """ Drop a bucket from the database """
+        cmd = (
+            f'couchbase-cli bucket-delete '
+            f'--cluster {self.couchbase_endpoint} '
+            f'--username {self.username} '
+            f'--password {self.password} '
+            f'--bucket {bucket_name}'
+        )
+        process = subprocess.Popen(cmd, shell=True)
+        output, error = process.communicate()
+        if error and error != "None":
+            self.error(error)
+        if output and output != "None":
+            self.info(output)
         return output
 
     def flush_bucket(self, bucket_name=""):

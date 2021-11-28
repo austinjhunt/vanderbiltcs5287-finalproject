@@ -90,7 +90,7 @@ class Driver:
                 f'ycsb/bin/ycsb load couchbase2 -s -P ycsb/workloads/workload{workload} '
                 f'{properties}'
             )
-            self.info(f"RUNNING YSCB LOAD DATA COMMAND: \n{load_data_cmd}")
+
             process = subprocess.Popen(load_data_cmd.split())
             output, error = process.communicate()
             if error:
@@ -121,14 +121,11 @@ class Driver:
                 f' -p measurementtype={measurementtype} '
             )
             load_data_cmd =  f'ycsb/bin/ycsb load couchbase2 -s {properties}'
-            self.info(f"RUNNING YSCB LOAD DATA COMMAND: \n{load_data_cmd}")
             process = subprocess.Popen(load_data_cmd.split())
             output, error = process.communicate()
             if error:
                 self.error(f'Error: {error}')
             run_workload_cmd = f'ycsb/bin/ycsb run couchbase2 -s {properties}'
-
-            self.info(f"RUNNING YSCB RUN COMMAND: \n{run_workload_cmd}")
         process = subprocess.Popen(run_workload_cmd.split(), stdout=subprocess.PIPE)
         output, error = process.communicate()
         if error:
@@ -137,31 +134,39 @@ class Driver:
 
     def run_ycsb(self):
         """ Use YCSB to analyze performance of various cluster configurations """
-        CLUSTER_SIZE = 4 # leader + 4 nodes
+        NUM_FOLLOWERS = 4
+        CLUSTER_SIZE = NUM_FOLLOWERS + 1 # (leader)
         BUCKET_NAME = 'ycsb_test_bucket'
         self.cluster_manager.setup_cluster_colocated_services( cluster_size=CLUSTER_SIZE )
-        self.data_manager.create_bucket(bucket_name=BUCKET_NAME, bucket_ram_quota_mb=1024, bucket_replicas=0)
-        self.cluster_manager.create_user_for_bucket(username=BUCKET_NAME,password=BUCKET_NAME,bucket_name=BUCKET_NAME)
-        self.data_manager.flush_bucket(bucket_name=BUCKET_NAME)
-        # create a scope, then a collection
-        self.data_manager.create_scope(scope_name=self.default_scope, bucket_name=BUCKET_NAME)
-        # CREATE PRIMARY INDEX ON bucket
-        self.data_manager.create_primary_index(bucket_name=BUCKET_NAME)
-        self.data_manager.create_collection(bucket_name=BUCKET_NAME, scope_name=self.default_scope, collection_name=self.default_collection)
+        self.cluster_manager.fix_leader_address() # switch leader from private IP to public DNS; YCSB won't work otherwise
+        self.data_manager.drop_bucket(bucket_name=BUCKET_NAME)
 
         operation_proportions = [
             {
-                'read': 0.75,
-                'insert': 0.25
+                'insert': 1,
+            },
+            {
+                'update': 1,
             },
             {
                 'read': 1
             },
             {
-                'read': 0.75,
-                'update': 0.25,
+                'read': 0.9,
+                'insert': 0.1
             },
-
+            {
+                'read': .1,
+                'insert': 0.9
+            },
+            {
+                'read': 0.9,
+                'update': 0.1,
+            },
+            {
+                'read': 0.1,
+                'update': 0.9,
+            },
             {
                 'read': .5,
                 'update': .5,
@@ -169,18 +174,20 @@ class Driver:
             {
                 'read': 0.5,
                 'insert': 0.5
-            },
-            {
-                'scan': 0.95,
-                'insert': 0.05
             }
         ]
 
-        for recordcount in [1000, 10000, 100000]:
-            for fieldcount in [10, 100, 500]:
-                for fieldlength_bytes in [10, 50, 100]: # num bytes for each field
-                    for requestdistribution in ['zipfian', 'uniform', 'latest']:
+        for recordcount in [1000, 100000]:
+            for fieldcount in [10, 500]:
+                for fieldlength_bytes in [10, 100]: # num bytes for each field
+                    for requestdistribution in [
+                        'uniform', 'zipfian', 'hotspot']:
                         for op_pro in operation_proportions:
+                            self.data_manager.create_bucket(bucket_name=BUCKET_NAME, bucket_ram_quota_mb=1024, bucket_replicas=0)
+                            self.cluster_manager.create_user_for_bucket(username=BUCKET_NAME, password=BUCKET_NAME, bucket_name=BUCKET_NAME)
+                            self.data_manager.create_primary_index(bucket_name=BUCKET_NAME)
+                            self.data_manager.create_scope(scope_name=self.default_scope, bucket_name=BUCKET_NAME)
+                            self.data_manager.create_collection(bucket_name=BUCKET_NAME, scope_name=self.default_scope, collection_name=self.default_collection)
                             output = self._ycsb(
                                 use_workload_template=False,
                                 host=self.cluster_manager.get_leader_address(),
@@ -217,10 +224,8 @@ class Driver:
                             with open(f'{ycsb_log_folder}/{ycsb_output_filename}', 'w') as f:
                                 f.write(output)
                             self.info(output)
-
-        # Flush bucket at the end
-        self.data_manager.flush_bucket(
-            bucket_name=BUCKET_NAME)
+                            # Flush bucket at the end, otherwise you get duplicate document error
+                            self.data_manager.drop_bucket(bucket_name=BUCKET_NAME)
 
     def run_test_framework(self):
         """ Analyze the impact of increasingly tuning durability within Couchbase cluster on operation latency;
