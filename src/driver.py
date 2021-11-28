@@ -22,7 +22,8 @@ class Driver:
         # Tell the data manager what the public address of the cluster leader is
         self.data_manager = DataManager(username=username, password=password, verbose=verbose,
             leader_address=self.cluster_manager.get_public_address(self.cluster_manager.get_leader()))
-
+        self.admin_username = username
+        self.admin_password = password
         self.data_sample_size = data_sample_size
         self.operation_sample_size = operation_sample_size
         self.small_data_sample_size = small_data_sample_size
@@ -53,48 +54,81 @@ class Driver:
         else:
             self.logger.setLevel(logging.INFO)
 
-    def _ycsb(self, workload='a', url='', host='', bucket='', password='', persistTo=0, replicateTo=0):
-        """
-        You can set the following properties (with the default settings applied):
-        couchbase.url=http://127.0.0.1:8091/pools => The connection URL from one server.
-        couchbase.bucket=default => The bucket name to use.
-        couchbase.password= => The password of the bucket.
-        couchbase.checkFutures=true => If the futures should be inspected (makes ops sync).
-        couchbase.persistTo=0 => Observe Persistence ("PersistTo" constraint).
-        couchbase.replicateTo=0 => Observe Replication ("ReplicateTo" constraint).
-        couchbase.ddoc => The ddoc name used for scanning
-        couchbase.view => The view name used for scanning
-        couchbase.stale => How to deal with stale values in View Query for scanning. (OK, FALSE, UPDATE_AFTER)
-        couchbase.json=true => Use json or java serialization as target format.
-        """
-        # Now you can run the workload
-        # properties = (
-        #     f' -p couchbase.url={url} '
-        #     f' -p couchbase.bucket={bucket} '
-        #     f' -p couchbase.password={password} '
-        #     f' -p couchbase.persistTo={persistTo} '
-        #     f' -p couchbase.replicateTo={replicateTo} '
-        # )
-        properties = (
-            f' -p couchbase.host={host} '
-            f' -p couchbase.bucket={bucket} '
-            f' -p couchbase.password={password} '
-            f' -p couchbase.persistTo={persistTo} '
-            f' -p couchbase.replicateTo={replicateTo} '
-        )
-        # Before you can actually run the workload, you need to "load" the data first.
-        load_data_cmd = (
-            f'ycsb/bin/ycsb load couchbase2 -s -P ycsb/workloads/workload{workload} '
-            f'{properties}'
-        )
-        process = subprocess.Popen(load_data_cmd.split())
-        output, error = process.communicate()
-        if error:
-            self.error(f'Error: {error}')
-        run_workload_cmd = (
-            f'ycsb/bin/ycsb run couchbase2 -s -P ycsb/workloads/workload{workload} '
-            f'{properties}'
-        )
+    def _ycsb(self,
+        use_workload_template=False,
+        workload='a',
+        url='',
+        host='',
+        bucket='',
+        password='',
+        persistTo=0,
+        replicateTo=0,
+        fieldcount=10,
+        fieldlength=100,
+        recordcount=1000000,
+        operationcount=3000000,
+        readproportion=0.5,
+        updateproportion=0.5,
+        scanproportion=0,
+        insertproportion=0,
+        requestdistribution='zipfian',
+        measurementtype='raw'
+        ):
+
+        if use_workload_template:
+            # YCSB driven by config file
+            properties = (
+                f' -p couchbase.host={host} '
+                f' -p couchbase.bucket={bucket} '
+                f' -p couchbase.password={password} '
+                f' -p couchbase.persistTo={persistTo} '
+                f' -p couchbase.replicateTo={replicateTo} '
+                f' -p measurementtype={measurementtype} '
+            )
+            # Before you can actually run the workload, you need to "load" the data first.
+            load_data_cmd = (
+                f'ycsb/bin/ycsb load couchbase2 -s -P ycsb/workloads/workload{workload} '
+                f'{properties}'
+            )
+            self.info(f"RUNNING YSCB LOAD DATA COMMAND: \n{load_data_cmd}")
+            process = subprocess.Popen(load_data_cmd.split())
+            output, error = process.communicate()
+            if error:
+                self.error(f'Error: {error}')
+            run_workload_cmd = (
+                f'ycsb/bin/ycsb run couchbase2 -s -P ycsb/workloads/workload{workload} '
+                f'{properties}'
+            )
+        else:
+            # YCSB fully driven by runtime args, not config file
+            properties = (
+                f' -p couchbase.host={host} '
+                f' -p couchbase.bucket={bucket} '
+                f' -p couchbase.password={password} '
+                f' -p couchbase.persistTo={persistTo} '
+                f' -p couchbase.replicateTo={replicateTo} '
+                f' -p fieldcount={fieldcount} '
+                f' -p fieldlength={fieldlength} '
+                f' -p recordcount={recordcount} '
+                f' -p operationcount={operationcount} '
+                f' -p workload=site.ycsb.workloads.CoreWorkload '
+                f' -p readallfields=true '
+                f' -p readproportion={readproportion} '
+                f' -p updateproportion={updateproportion} '
+                f' -p scanproportion={scanproportion} '
+                f' -p insertproportion={insertproportion} '
+                f' -p requestdistribution={requestdistribution} '
+                f' -p measurementtype={measurementtype} '
+            )
+            load_data_cmd =  f'ycsb/bin/ycsb load couchbase2 -s {properties}'
+            self.info(f"RUNNING YSCB LOAD DATA COMMAND: \n{load_data_cmd}")
+            process = subprocess.Popen(load_data_cmd.split())
+            output, error = process.communicate()
+            if error:
+                self.error(f'Error: {error}')
+            run_workload_cmd = f'ycsb/bin/ycsb run couchbase2 -s {properties}'
+
+            self.info(f"RUNNING YSCB RUN COMMAND: \n{run_workload_cmd}")
         process = subprocess.Popen(run_workload_cmd.split(), stdout=subprocess.PIPE)
         output, error = process.communicate()
         if error:
@@ -103,95 +137,90 @@ class Driver:
 
     def run_ycsb(self):
         """ Use YCSB to analyze performance of various cluster configurations """
-        # https://docs.couchbase.com/python-sdk/current/howtos/kv-operations.html#durability
-        # (majority, majorityAndPersistToActive, persistToMajority)
-        for durability_level in ['low', 'medium', 'high']:
-            self.info(
-                f'\n'
-                f'#####################################################################\n'
-                f'################     DURABILITY={durability_level}      #######################\n'
-                f'#####################################################################\n'
-                f'\n'
-            )
-            for cluster_size in range(self.cluster_manager.get_max_cluster_size()):
-                # cluster size = 0 means just leader; 1 means leader + 1 node, 2=> leader + 2 nodes, 3 => leader + 3 nodes, etc.
-                self.info(
-                    f'\n'
-                    f'#####################################################################\n'
-                    f'################# DURABILITY={durability_level},CLUSTER_SIZE={cluster_size+1} ############\n'
-                    f'#####################################################################\n'
-                    f'\n'
-                )
-                self.cluster_manager.setup_cluster_colocated_services(
-                    cluster_size=cluster_size)
-                for bucket_size_label, bucket_size_value in {
-                    'small-bucket': self.small_data_sample_size,
-                    'medium-bucket': self.medium_data_sample_size,
-                    'large-bucket': self.large_data_sample_size
-                }.items():
-                    self.info(
-                        f'\n'
-                        f'#####################################################################\n'
-                        f'############### DURABILITY={durability_level},CLUSTER_SIZE={cluster_size+1} ###############\n'
-                        f'############### BUCKET_SIZE={bucket_size_label} (docs={bucket_size_value}) ###############\n'
-                        f'#####################################################################\n'
-                        f'\n'
-                    )
-                    # if there's more than just the leader in the cluster, use data replication
-                    num_replicas = 0
-                    if cluster_size >= 1:
-                        num_replicas = 1
-                    self.data_manager.set_bucket_replica_number(
-                        new_replica_number=num_replicas)
-                    bucket = self.data_manager.create_bucket(
-                        bucket_name=bucket_size_label)
-                    # Add user to bucket with username and password matching bucket label
-                    self.cluster_manager.create_user_for_bucket(
-                        username=bucket_size_label,
-                        password=bucket_size_label,
-                        bucket=bucket_size_label
-                    )
-                    self.data_manager.flush_bucket(
-                        bucket_name=bucket_size_label)
-                    # create a scope, then a collection
-                    scope = self.data_manager.create_scope(
-                        scope_name=self.default_scope,
-                        bucket_name=bucket_size_label)
+        CLUSTER_SIZE = 4 # leader + 4 nodes
+        BUCKET_NAME = 'ycsb_test_bucket'
+        self.cluster_manager.setup_cluster_colocated_services( cluster_size=CLUSTER_SIZE )
+        self.data_manager.create_bucket(bucket_name=BUCKET_NAME, bucket_ram_quota_mb=1024, bucket_replicas=0)
+        self.cluster_manager.create_user_for_bucket(username=BUCKET_NAME,password=BUCKET_NAME,bucket_name=BUCKET_NAME)
+        self.data_manager.flush_bucket(bucket_name=BUCKET_NAME)
+        # create a scope, then a collection
+        self.data_manager.create_scope(scope_name=self.default_scope, bucket_name=BUCKET_NAME)
+        # CREATE PRIMARY INDEX ON bucket
+        self.data_manager.create_primary_index(bucket_name=BUCKET_NAME)
+        self.data_manager.create_collection(bucket_name=BUCKET_NAME, scope_name=self.default_scope, collection_name=self.default_collection)
 
-                    # Create index on scope
-                    self.data_manager.create_primary_index(
-                        bucket_name=bucket_size_label)
+        operation_proportions = [
+            {
+                'read': 0.75,
+                'insert': 0.25
+            },
+            {
+                'read': 1
+            },
+            {
+                'read': 0.75,
+                'update': 0.25,
+            },
 
-                    collection = self.data_manager.create_collection(
-                        bucket_name=bucket_size_label,
-                        scope_name=self.default_scope,
-                        collection_name=self.default_collection)
+            {
+                'read': .5,
+                'update': .5,
+            },
+            {
+                'read': 0.5,
+                'insert': 0.5
+            },
+            {
+                'scan': 0.95,
+                'insert': 0.05
+            }
+        ]
 
-                    # run each workload
-                    for workload in ['a', 'b', 'c', 'd', 'e', 'f']:
-                        # Before you can actually run the workload, you need to "load" the data first.
+        for recordcount in [1000, 10000, 100000]:
+            for fieldcount in [10, 100, 500]:
+                for fieldlength_bytes in [10, 50, 100]: # num bytes for each field
+                    for requestdistribution in ['zipfian', 'uniform', 'latest']:
+                        for op_pro in operation_proportions:
+                            output = self._ycsb(
+                                use_workload_template=False,
+                                host=self.cluster_manager.get_leader_address(),
+                                bucket=BUCKET_NAME,
+                                password=BUCKET_NAME,
+                                persistTo=0,
+                                replicateTo=0,
+                                fieldcount=fieldcount,
+                                fieldlength=fieldlength_bytes,
+                                recordcount=recordcount,
+                                operationcount=recordcount,
+                                readproportion=op_pro.get('read',0),
+                                updateproportion=op_pro.get('update',0),
+                                scanproportion=op_pro.get('scan',0),
+                                insertproportion=op_pro.get('insert',0),
+                                requestdistribution=requestdistribution,
+                                measurementtype="raw"
+                            )
 
-                        output = self._ycsb(
-                            workload=workload,
-                            host=self.cluster_manager.get_leader_address(),
-                            bucket=bucket_size_label,
-                            password=bucket_size_label,
-                            persistTo=0,
-                            replicateTo=0
-                        )
-                        ycsb_output_filename = (
-                            f'durability{durability_level}-clustersize{cluster_size + 1}-'
-                            f'bucketsize{bucket_size_label}-workload{workload}.txt'
-                        )
-                        ycsb_log_folder = 'lib/data/ycsb-results'
-                        Path(ycsb_log_folder).mkdir(parents=True, exist_ok=True)
-                        with open(f'{ycsb_log_folder}/{ycsb_output_filename}', 'w') as f:
-                            f.write(output)
-                        self.info(output)
+                            ycsb_output_filename = (
+                                f'csz{CLUSTER_SIZE + 1}'
+                                f'-rc{recordcount}'
+                                f'-fc{fieldcount}'
+                                f'-fl{fieldlength_bytes}'
+                                f'-rd{requestdistribution}'
+                                f'-r{op_pro.get("read",0)}'
+                                f'-u{op_pro.get("update",0)}'
+                                f'-s{op_pro.get("scan",0)}'
+                                f'-i{op_pro.get("insert",0)}.data'
+                            )
 
-                    # Flush bucket at the end
-                    self.data_manager.flush_bucket(
-                        bucket_name=bucket_size_label)
+                            ycsb_log_folder = 'lib/data/ycsb-results'
+                            Path(ycsb_log_folder).mkdir(parents=True, exist_ok=True)
+                            with open(f'{ycsb_log_folder}/{ycsb_output_filename}', 'w') as f:
+                                f.write(output)
+                            self.info(output)
+
+        # Flush bucket at the end
+        self.data_manager.flush_bucket(
+            bucket_name=BUCKET_NAME)
 
     def run_test_framework(self):
         """ Analyze the impact of increasingly tuning durability within Couchbase cluster on operation latency;

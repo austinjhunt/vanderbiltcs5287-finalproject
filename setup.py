@@ -67,4 +67,4 @@ class Setup:
 if __name__ == "__main__":
     setup = Setup()
     setup.build_hosts_json_file()
-    setup.build_test_data_sample()
+    # setup.build_test_data_sample()

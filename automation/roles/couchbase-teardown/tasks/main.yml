@@ -1,0 +1,12 @@
+- name: Stop Couchbase server
+  become: yes
+  systemd:
+    name: couchbase-server
+    state: stopped
+
+- name: Recursively remove couchbase directory
+  become: yes
+  ansible.builtin.file:
+    path: /opt/couchbase
+    state: absent
+

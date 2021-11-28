@@ -92,9 +92,12 @@ class ClusterManager:
     def _add_public_alt_addr(self, node):
         """ Add public IP address as alt address for a given node in cluster """
         cmd = (
-            f'couchbase-cli setting-alternate-address --cluster {self.couchbase_url} '
+            f'couchbase-cli setting-alternate-address '
+            f'--cluster {self.get_public_address(node)}:8091 '
             f'--node {self.get_public_address(node)} '
-            f'--username {self.username} --password {self.password} --set '
+            f'--username {self.username} '
+            f'--password {self.password} '
+            f'--set '
             f'--hostname {self.get_public_address(node)} '
         )
         process = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -115,14 +118,19 @@ class ClusterManager:
         for f in self.followers:
             self._add_public_alt_addr(f)
 
-
     def add_node_to_cluster(self, node_private_address, services="data"):
         """ Given a private IP address of a node within a VPC, add that node to a cluster by
         passing it to the leader of the cluster with the server-add command. Indicate what services it should run! Options: "data", "index", "query", "fts" (full text search), "eventing", "analytics" and "backup". Don't use analytics, eventing, or backup for this testing. """
 
         self.logger.info(f"Adding node (private IP={node_private_address}) to cluster")
         add_node_cmd = (
-            f'couchbase-cli server-add --cluster {self.couchbase_url} --server-add http://{node_private_address}:8091 --username {self.username} --password {self.password} --server-add-username {self.username} --server-add-password {self.password} '
+            f'couchbase-cli server-add '
+            f'--cluster {self.couchbase_url} '
+            f'--server-add http://{node_private_address}:8091 '
+            f'--username {self.username} '
+            f'--password {self.password} '
+            f'--server-add-username {self.username} '
+            f'--server-add-password {self.password} '
             f'--services {services}'
         )
         process = subprocess.Popen(add_node_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -143,7 +151,7 @@ class ClusterManager:
 
     def randomly_assign_host_roles(self):
         """ Randomly select one of self.hosts as leader, rest as followers """
-        self.leader = random.choice(self.hosts)
+        self.leader = self.hosts[0]
         self.followers = [el for el in self.hosts if el != self.leader]
 
     def get_leader(self):
@@ -164,8 +172,10 @@ class ClusterManager:
         but you may also run index, query, fts (we are ignoring eventing, analytics and backup) """
         services = ",".join(services)
         init_cluster_cmd = (
-            f'couchbase-cli cluster-init -c {self.couchbase_url} '
-            f'--cluster-username {self.username} --cluster-password {self.password} '
+            f'couchbase-cli cluster-init '
+            f'-c {self.couchbase_url} '
+            f'--cluster-username {self.username} '
+            f'--cluster-password {self.password} '
             f'--services {services}'
         )
         process = subprocess.Popen(init_cluster_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -174,15 +184,14 @@ class ClusterManager:
         if error and error != "None":
             self.error(error)
 
-
-
-
     def rebalance_cluster(self):
         """ Rebalance a cluster (after adding a node; important) """
         self.info("Rebalancing cluster")
         rebalance_cmd = (
-            f'couchbase-cli rebalance -c {self.couchbase_url} '
-            f'--username {self.username} --password {self.password}'
+            f'couchbase-cli rebalance '
+            f'-c {self.couchbase_url} '
+            f'--username {self.username} '
+            f'--password {self.password} '
         )
         process = subprocess.Popen(rebalance_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output, error = process.communicate()
@@ -275,35 +284,45 @@ class ClusterManager:
         # Rebalance after adding all nodes based on layout
         self.rebalance_cluster()
 
-    def create_user_for_bucket(self, username="", password="", bucket=""):
+    def create_user_for_bucket(self, username="", password="", bucket_name=""):
         """ Create a user in couchbase cluster """
-        user = User(
-            username=username,
-            password=password,
-            display_name=username,
-            roles=[
-                # Roles required for reading data from bucket
-                Role(name="bucket_full_access", bucket="*")
-            ]
-        )
         # Add user to cluster via Python API
-        Cluster(
+
+        self.info(
+            f"Creating user with username {username} and password {password} "
+            f"with role bucket_full_access on bucket=* using couchbase URL "
+            f"{self.couchbase_url}")
+        cluster = Cluster(
             self.couchbase_url,
             authenticator=PasswordAuthenticator(
                 self.username,
                 self.password
+            ))
+        user_manager = cluster.users()
+        self.debug(f"Cluster: {cluster}")
+        self.debug(f"User Manager: {user_manager}")
+        user = User(
+                username=username,
+                password=password,
+                display_name=username,
+                roles=[
+                    # Roles required for reading data from bucket
+                    Role(name="bucket_full_access", bucket="*")
+                ]
             )
-        ).users().upsert_user(user)
+        self.info(f"Upserting user: {user}")
+        response = user_manager.upsert_user(user)
+        self.info(response)
 
-    def setup_cluster_colocated_services(self,cluster_size=0):
+    def setup_cluster_colocated_services(self,cluster_size=0): #, using_ycsb=False):
         """ Create a cluster of size N with co-located services. """
         services = "data,query,index,fts"
-        self.info(f"Creating cluster (co-located services) of size {cluster_size} nodes")
+        self.info(f"Creating cluster (co-located services) of size {cluster_size + 1} nodes")
         for index, follower in enumerate(self.followers):
             if index < cluster_size:
                 host_private_address = self.get_private_address(follower)
                 self.add_node_to_cluster(host_private_address, services=services)
         # Rebalance after adding all nodes based on layout
         self.rebalance_cluster()
-        # Enable access via public IP
+        # Enable access via public IP; breaks for YCSB
         self.add_alternate_couchbase_addresses()

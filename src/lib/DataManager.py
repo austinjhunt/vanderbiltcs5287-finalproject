@@ -35,7 +35,7 @@ class DataManager:
                 self.password
             )
         )
-        self.bucket_ram_quota_mb = 256
+        self.bucket_ram_quota_mb = 1024
         self.bucket_replica_number = 2
 
     def set_bucket_replica_number(self, new_replica_number):
@@ -78,23 +78,29 @@ class DataManager:
     def create_primary_index(self, bucket_name=""):
         index_name = f'default_primary_index_{bucket_name.replace("-","_")}'
         self.info(f'Creating primary index {index_name} on `{bucket_name}`')
-        response = self.cluster.query(
-            f'CREATE PRIMARY INDEX {index_name} ON `{bucket_name}`'
-        )
+        response = self.cluster.query(f'CREATE PRIMARY INDEX {index_name} ON `{bucket_name}`')
         self.info(response)
         return response
 
-    def create_bucket(self, bucket_name=""):
+    def create_bucket(self, bucket_name="", bucket_ram_quota_mb=1024, bucket_replicas=0):
         """ Create and return a bucket """
         self.info(
-            f"Creating bucket {bucket_name} with RAM quota {self.bucket_ram_quota_mb}MB "
-            f"and {self.bucket_replica_number} replicas"
+            f"Creating bucket {bucket_name} with RAM quota {bucket_ram_quota_mb}MB "
+            f"and {bucket_replicas} replicas"
             )
         create_bucket_cmd = (
-            f'couchbase-cli bucket-create -c {self.couchbase_endpoint} --username {self.username} --password {self.password} '
-            f'--bucket {bucket_name} --bucket-type couchbase --durability-min-level majority '
-            f'--bucket-ramsize {self.bucket_ram_quota_mb} --bucket-replica {self.bucket_replica_number} '
-            f'--enable-flush 1 --conflict-resolution sequence --wait '
+            f'couchbase-cli bucket-create '
+            f'-c {self.couchbase_endpoint} '
+            f'--username {self.username} '
+            f'--password {self.password} '
+            f'--bucket {bucket_name} '
+            f'--bucket-type couchbase '
+            f'--durability-min-level none '
+            f'--bucket-ramsize {bucket_ram_quota_mb} '
+            f'--bucket-replica {bucket_replicas} '
+            f'--enable-flush 1 '
+            f'--conflict-resolution sequence '
+            f'--wait '
         )
         process = subprocess.Popen(create_bucket_cmd.split())
         output, error = process.communicate()
@@ -105,10 +111,18 @@ class DataManager:
                 # Simply update the replica number
                 self.info(f'Bucket {bucket_name} already exists, just applying updates (updated_replica_num={self.bucket_replica_number})')
                 create_bucket_cmd = (
-                    f'couchbase-cli bucket-edit -c {self.couchbase_endpoint} --username {self.username} --password {self.password} '
-                    f'--bucket {bucket_name} --bucket-type couchbase --durability-min-level majority '
-                    f'--bucket-ramsize {self.bucket_ram_quota_mb} --bucket-replica {self.bucket_replica_number} '
-                    f'--enable-flush 1 --conflict-resolution sequence --wait '
+                    f'couchbase-cli bucket-edit '
+                    f'-c {self.couchbase_endpoint} '
+                    f'--username {self.username} '
+                    f'--password {self.password} '
+                    f'--bucket {bucket_name} '
+                    f'--bucket-type couchbase '
+                    f'--durability-min-level none '
+                    f'--bucket-ramsize {self.bucket_ram_quota_mb} '
+                    f'--bucket-replica {self.bucket_replica_number} '
+                    f'--enable-flush 1 '
+                    f'--conflict-resolution sequence '
+                    f'--wait '
                 )
                 process = subprocess.Popen(create_bucket_cmd.split())
                 output, error = process.communicate()
@@ -122,8 +136,11 @@ class DataManager:
         """ Create a collection """
         self.info(f'Creating scope {scope_name} on bucket {bucket_name}')
         cmd = (
-            f'couchbase-cli collection-manage --cluster {self.couchbase_endpoint} '
-            f'--username {self.username} --password {self.password} --create-scope {scope_name} '
+            f'couchbase-cli collection-manage '
+            f'--cluster {self.couchbase_endpoint} '
+            f'--username {self.username} '
+            f'--password {self.password} '
+            f'--create-scope {scope_name} '
             f'--bucket {bucket_name}'
         )
         process = subprocess.Popen(cmd.split())
