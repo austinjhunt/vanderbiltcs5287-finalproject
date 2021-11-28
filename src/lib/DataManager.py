@@ -85,10 +85,13 @@ class DataManager:
         # index available on keyspace `default`:`ycsb_test_bucket` that matches your query.
         #  Use CREATE PRIMARY INDEX ON `default`:`ycsb_test_bucket` to create a primary index,
         # or check that your expected index is online.","code":4000}
-        response = self.cluster.query(f'CREATE PRIMARY INDEX ON `default`:`{bucket_name}`')
-        for r in response.rows():
-            self.info(r)
-        return response
+        try:
+            response = self.cluster.query(f'CREATE PRIMARY INDEX ON `default`:`{bucket_name}`')
+            for r in response.rows():
+                self.info(r)
+            return response
+        except:
+            return None
 
     def create_bucket(self, bucket_name="", bucket_ram_quota_mb=1024, bucket_replicas=0):
         """ Create and return a bucket """

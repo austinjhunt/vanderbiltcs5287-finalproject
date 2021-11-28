@@ -6,6 +6,9 @@ from matplotlib import cm
 from pathlib import Path
 import numpy as np
 import logging
+import sys
+import json
+from collections import OrderedDict
 from tabulate import tabulate
 class Analyzer:
     def __init__(self,verbose=False):
@@ -475,55 +478,263 @@ class Analyzer:
         except:
             return []
 
-    def get_ycsb_stats(self):
+    def collect_ycsb_stats_to_json(self):
         """ Use the Raw measurement data from YCSB to generate a
         dictionary of aggregated data """
         ycsb_data_folder = os.path.join(os.path.dirname(
             os.path.abspath(__file__)),'data','ycsb-results')
 
+
+        latency_by_record_count = {}
+        latency_by_field_count = {}
+        latency_by_field_length = {}
+        latency_by_request_distribution = {}
+
         for data_file in os.listdir(ycsb_data_folder):
+            file_pointer = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                'data','ycsb-results', data_file)
             # data file name format:
             # csz<CLUSTER_SIZE>-rc<RECORD_COUNT>-fc<FIELD_COUNT>-fl<FIELD_LENGTH_BYTES>-
             # rd<REQUEST_DISTRIBUTION>-r<READ_PROPORTION>-u<UPDATE_PROPORTION>-
             # s<SCAN_PROPORTION>-i<INSERT_PROPORTION>
             param_value_pairs = data_file.split('-')
             cluster_size = param_value_pairs[0].split('csz')[-1]
-            record_count = param_value_pairs[1].split('rc')[-1]
-            field_count = param_value_pairs[2].split('fc')[-1]
-            field_length = param_value_pairs[3].split('fl')[-1]
+
+            # initialize each key's value to empty dict, format will be
+            # Key = READPROPORTION-UPDATEPROPORTION-INSERTPROPORTION
+            # Value = {
+            #   'read':  {percentile:[latency_list...], percentile: [latency_list]}
+            #   'update':  {percentile:[latency_list...], percentile: [latency_list]}
+            #   'insert': {percentile:[latency_list...], percentile: [latency_list]}
+            # }
+
+            # Data set size
+            record_count = int(param_value_pairs[1].split('rc')[-1])
+            if record_count not in latency_by_record_count:
+                 # How does tail latency of each operation type change with record count?
+                latency_by_record_count[record_count] = {}
+
+            field_count = int(param_value_pairs[2].split('fc')[-1])
+            if field_count not in latency_by_field_count:
+                # How does tail latency of each operation type change with field count?
+                latency_by_field_count[field_count] = {}
+
+            field_length = int(param_value_pairs[3].split('fl')[-1])
+            if field_length not in latency_by_field_length:
+                # How does tail latency of each operation type change with field length?
+                latency_by_field_length[field_length] = {}
+
+            # Request distribution
             request_distribution = param_value_pairs[4].split('rd')[-1]
+            if request_distribution not in latency_by_request_distribution:
+                # How does tail latency of each operation type change with request distribution?
+                latency_by_request_distribution[request_distribution] = {}
+
+            # Operation Proportions
             read_proportion = float(param_value_pairs[5].split('r')[-1])
             update_proportion = float(param_value_pairs[6].split('u')[-1])
-            scan_proportion = float(param_value_pairs[7].split('s')[-1])
-            insert_proportion = float(param_value_pairs[8].split('i')[-1])
+            insert_proportion = float(param_value_pairs[8].split('i')[-1].replace('.data',''))
+            op_proportions_key = f'{read_proportion}-{update_proportion}-{insert_proportion}'
 
-            file_pointer = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                'data','ycsb-results', data_file)
+            init_percentiles_dict = {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]}
+            init_op_latencies_for_current_proportions = {
+                    'read': init_percentiles_dict,
+                    'insert': init_percentiles_dict,
+                    'update': init_percentiles_dict
+                }
+
+            if op_proportions_key not in latency_by_record_count[record_count]:
+                latency_by_record_count[record_count][op_proportions_key] = init_op_latencies_for_current_proportions
+
+            if op_proportions_key not in latency_by_field_length[field_length]:
+                latency_by_field_length[field_length][op_proportions_key] = init_op_latencies_for_current_proportions
+
+            if op_proportions_key not in latency_by_field_count[field_count]:
+                latency_by_field_count[field_count][op_proportions_key] = init_op_latencies_for_current_proportions
+
+            if op_proportions_key not in latency_by_request_distribution[request_distribution]:
+                latency_by_request_distribution[request_distribution][op_proportions_key] = init_op_latencies_for_current_proportions
+
             for percentile in ['90', '95', '99', '99.9', '99.99']:
+                # We should only be interested in this latency information if
+                #
                 try:
                     read_microseconds_tail_latency = int(self.file_lines_that_contain(
-                        f'[READ], p{percentile}'
+                        f'[READ], p{percentile}',
+                        file_pointer
                     )[0].split(', ')[-1])
                 except Exception as e:
-                    self.error(e)
-                    pass
+                    self.error(f'{e}, setting read_microseconds_tail_latency = None ')
+                    # did not execute any read operations in this file
+                    read_microseconds_tail_latency = None
                 try:
                     insert_microseconds_tail_latency = int(self.file_lines_that_contain(
-                        f'[INSERT], p{percentile}'
+                        f'[INSERT], p{percentile}',
+                        file_pointer
                     )[0].split(', ')[-1])
                 except Exception as e:
-                    self.error(e)
-                    pass
+                    self.error(f'{e}, setting insert_microseconds_tail_latency = None ')
+                    # did not execute any insert operations in this file
+                    insert_microseconds_tail_latency = None
                 try:
                     update_microseconds_tail_latency = int(self.file_lines_that_contain(
-                        f'[UPDATE], p{percentile}'
+                        f'[UPDATE], p{percentile}',
+                        file_pointer
                     )[0].split(', ')[-1])
                 except Exception as e:
-                    self.error(e)
-                    pass
+                    self.error(f'{e}, setting update_microseconds_tail_latency = None ')
+                    # did not execute any update operations in this file
+                    update_microseconds_tail_latency = None
+
+                for op, latency in {
+                    'read': read_microseconds_tail_latency,
+                    'update': update_microseconds_tail_latency,
+                    'insert': insert_microseconds_tail_latency
+                    }.items():
+                    latency_by_record_count[record_count][op_proportions_key][op][percentile].append(latency)
+                    latency_by_field_length[field_length][op_proportions_key][op][percentile].append(latency)
+                    latency_by_field_count[field_count][op_proportions_key][op][percentile].append(latency)
+                    latency_by_request_distribution[request_distribution][op_proportions_key][op][percentile].append(latency)
+
+                    # Each of the above dicts should look something like, e.g. for latency_by_record_count
+                    # {
+                    #   1000: { # 1000 records
+                    #       '0.9-0.1-0': { # ratio key
+                    #           'read': {
+                        #           '90': [...latencies...],
+                        #           '95': [...latencies...],,
+                        #           '99': [...latencies...],
+                        #           '99.9': [...latencies...],
+                        #           '99.99': [...latencies...],
+                        #           },
+                        #       'update': {
+                        #           '90': [...latencies...],
+                        #           '95': [...latencies...],,
+                        #           '99': [...latencies...],
+                        #           '99.9': [...latencies...],
+                        #           '99.99': [...latencies...],
+                        #           },
+                        #        'insert': {
+                        #           '90': [...latencies...],
+                        #           '95': [...latencies...],,
+                        #           '99': [...latencies...],
+                        #           '99.9': [...latencies...],
+                        #           '99.99': [...latencies...],
+                    #           }
+                    #       }
+                    #   }
+                    # }
+
+        latencies = {
+            'by_record_count': latency_by_record_count,
+            'by_field_length': latency_by_field_length,
+            'by_field_count': latency_by_field_count,
+            'by_request_distribution': latency_by_request_distribution
+
+        }
+        return latencies
+
+    def _plot_record_count_v_tail_latencies_for_operation(self, ycsb_stats=None, plot_folder='', operation='read', variable=""):
+        """
+        Plot a scatter plot showing relationship between [record_count, field_length, field_count, request_distribution]
+         and tail latency for a specific operation [read, update, insert]
+        x = variable [record_count, field_length, field_count, request_distribution]
+        y = latency
+        color of dots = percentile
+        For the operation latency data, use the latency data where the proportion for that operation was 100%
+        """
+        data_key = f'by_{variable}'
+        plot_file_name = f'{plot_folder}/{variable}-vs-tail-latency-{operation}.png'
+        if variable == "record_count":
+            pretty_name = f'Record Count'
+        elif variable == "field_length":
+            pretty_name = f'Field Length'
+        elif variable == "field_count":
+            pretty_name = f'Field Count'
+        elif variable == "request_distribution":
+            pretty_name = f'Request Distribution'
+        else:
+            self.error('You must use one of the following values for the variable parameter: [record_count, field_length, field_count, request_distribution]')
+
+        if operation == "read":
+            proportion_key = "1.0-0.0-0.0"
+        elif operation == "update":
+            proportion_key = "0.0-1.0-0.0"
+        elif operation == "insert":
+            proportion_key = "0.0-0.0-1.0"
+
+        data = ycsb_stats[data_key]
+        x_values = data.keys()
+        self.info(f'X values: {x_values}')
+        y_values_90 = []
+        y_values_95 = []
+        y_values_99 = []
+        y_values_99_9 = []
+        y_values_99_99 = []
+
+        for key in x_values:
+            y_values_90.append(data[key][proportion_key][operation]["90"])
+            y_values_95.append(data[key][proportion_key][operation]["95"])
+            y_values_99.append(data[key][proportion_key][operation]["99"])
+            y_values_99_9.append(data[key][proportion_key][operation]["99.9"])
+            y_values_99_99.append(data[key][proportion_key][operation]["99.99"])
+
+        self.info(f"Y values length: {len(y_values_90)}")
+        assert (y_values_90[0] != y_values_90[1])
+        assert (y_values_95[0] != y_values_95[1])
+        fig = plt.figure()
+        ax = fig.add_subplot()
+        ax.set_ylabel(u'Latency (\u03bcs)') # microseconds
+        ax.set_xlabel(pretty_name)
+        # plt.xticks([i for i in range(len(x_values))])
+        # plt.axes().set_xticklabels([v for v in x_values])
+
+        for xe, ye in zip(x_values, y_values_90):
+            ax.scatter([xe] * len(ye), ye, color='b', label='90%')
+        for xe, ye in zip(x_values, y_values_95):
+            ax.scatter([xe] * len(ye), ye, color='g', label='95%')
+        for xe, ye in zip(x_values, y_values_99):
+            ax.scatter([xe] * len(ye), ye, color='r', label='99%')
+        for xe, ye in zip(x_values, y_values_99_9):
+            ax.scatter([xe] * len(ye), ye, color='c', label='99.9%')
+        for xe, ye in zip(x_values, y_values_99_99):
+            ax.scatter([xe] * len(ye), ye, color='m', label='99.99%')
+
+        plt.tight_layout()
+        handles, labels = plt.gca().get_legend_handles_labels()
+        by_label = OrderedDict(zip(labels, handles))
+        plt.legend(by_label.values(), by_label.keys())
+
+
+        plt.title(f'{pretty_name} vs. Tail Latency of {operation} in Couchbase')
+        plt.savefig(plot_file_name)
+
+
+    def plot_ycsb_stats(self, ycsb_stats=None):
+        """ Take the YCSB stats generated by collect_ycsb_stats_to_json and generate plots """
+        if not ycsb_stats:
+            self.error("You need to provide ycsb_stats dictionary as argument")
+            return None
+        plot_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)),'plots','ycsb')
+        self.init_plot_folder(plot_folder)
+        for op in ['read', 'update', 'insert']:
+            for variable in ['record_count', 'field_length', 'field_count', 'request_distribution']:
+                self._plot_record_count_v_tail_latencies_for_operation(
+                    ycsb_stats=ycsb_stats,
+                    plot_folder=plot_folder,
+                    operation=op,
+                    variable=variable)
+
+
 
 
 if __name__ == "__main__":
     analyzer = Analyzer(verbose=True)
-    analyzer.get_ycsb_stats()
+    ycsb_stats = analyzer.collect_ycsb_stats_to_json()
+    # output_json_file = os.path.join(
+    #         os.path.dirname(os.path.abspath(__file__)),
+    #         'data','ycsb-stats.json')
+    # with open(output_json_file, 'w') as f:
+    #     json.dump(ycsb_stats , f)
+    analyzer.plot_ycsb_stats(ycsb_stats=ycsb_stats)
