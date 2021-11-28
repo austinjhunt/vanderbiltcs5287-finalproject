@@ -185,7 +185,7 @@ class Driver:
                         for op_pro in operation_proportions:
                             self.data_manager.create_bucket(bucket_name=BUCKET_NAME, bucket_ram_quota_mb=1024, bucket_replicas=0)
                             self.cluster_manager.create_user_for_bucket(username=BUCKET_NAME, password=BUCKET_NAME, bucket_name=BUCKET_NAME)
-                            self.data_manager.create_primary_index(bucket_name=BUCKET_NAME)
+                            self.data_manager.create_primary_index(bucket_name=BUCKET_NAME, using_ycsb=True)
                             self.data_manager.create_scope(scope_name=self.default_scope, bucket_name=BUCKET_NAME)
                             self.data_manager.create_collection(bucket_name=BUCKET_NAME, scope_name=self.default_scope, collection_name=self.default_collection)
                             output = self._ycsb(
@@ -227,7 +227,95 @@ class Driver:
                             # Flush bucket at the end, otherwise you get duplicate document error
                             self.data_manager.drop_bucket(bucket_name=BUCKET_NAME)
 
-    def run_test_framework(self):
+    def run_test_framework_heterogeneous_service_layouts(self):
+        """ Analyze the impact of increasingly tuning durability within Couchbase cluster on operation latency;
+        Higher durability should cause longer latencies. """
+        # https://docs.couchbase.com/python-sdk/current/howtos/kv-operations.html#durability
+        # (majority, majorityAndPersistToActive, persistToMajority)
+        # set cluster size to use all available hosts
+        CLUSTER_SIZE = self.cluster_manager.get_max_cluster_size()
+        DURABILITY_LEVEL = 'medium'
+        BUCKET_NAME = 'multidim-scaling-test-bucket'
+        BUCKET_NUM_DOCS = 200
+        self.cluster_manager.clear_cluster()
+        service_layouts = self.cluster_manager.get_service_layouts()
+        for slayout in service_layouts:
+            self.info(
+                f'\n'
+                f'#####################################################################\n'
+                f'################# DURABILITY_LVL={DURABILITY_LEVEL} #################\n'
+                f'################# CLUSTER_SIZE={CLUSTER_SIZE} #######################\n'
+                f'#### BUCKET_SIZE={BUCKET_NAME} (docs={BUCKET_NUM_DOCS}) #############\n'
+                f'################# SVC_LAYOUT={slayout} ##############################\n'
+                f'#####################################################################\n'
+                f'\n'
+            )
+            self.cluster_manager.setup_cluster_with_service_layout(slayout)
+            self.data_manager.drop_bucket(bucket_name=BUCKET_NAME)
+            self.data_manager.create_bucket(
+                bucket_name=BUCKET_NAME,
+                bucket_ram_quota_mb=256,
+                bucket_replicas=0)
+            self.data_manager.create_scope(
+                scope_name=self.default_scope,
+                bucket_name=BUCKET_NAME)
+            self.data_manager.create_primary_index(bucket_name=BUCKET_NAME)
+
+            self.data_manager.create_collection(
+                bucket_name=BUCKET_NAME,
+                scope_name=self.default_scope,
+                collection_name=self.default_collection)
+
+            # Insert (DATA_SAMPLE_SIZE times)
+            self.data_manager.run_inserts(
+                cluster_size=CLUSTER_SIZE,
+                bucket_name=BUCKET_NAME,
+                num_docs=BUCKET_NUM_DOCS,
+                operations_to_record=self.operation_sample_size,
+                durability_level=DURABILITY_LEVEL,
+                service_layout=slayout
+                )
+
+            # N1QL Query (OPERATION_SAMPLE_SIZE times)
+            self.data_manager.run_n1ql_selects(
+                cluster_size=CLUSTER_SIZE,
+                bucket_name=BUCKET_NAME,
+                operations_to_record=self.operation_sample_size,
+                durability_level=DURABILITY_LEVEL,
+                service_layout=slayout
+            )
+
+            # Full Text Search (.search()) (OPERATION_SAMPLE_SIZE times)
+            self.data_manager.run_full_text_searches(
+                cluster_size=CLUSTER_SIZE,
+                bucket_name=BUCKET_NAME,
+                operations_to_record=self.operation_sample_size,
+                durability_level=DURABILITY_LEVEL,
+                service_layout=slayout
+            )
+
+            # Update (OPERATION_SAMPLE_SIZE times)
+            self.data_manager.run_updates(
+                cluster_size=CLUSTER_SIZE,
+                bucket_name=BUCKET_NAME,
+                operations_to_record=self.operation_sample_size,
+                durability_level=DURABILITY_LEVEL,
+                service_layout=slayout
+            )
+
+            # Delete (OPERATION_SAMPLE_SIZE times)
+            self.data_manager.delete_docs_in_bucket(
+                cluster_size=CLUSTER_SIZE,
+                bucket_name=BUCKET_NAME,
+                operations_to_record=self.operation_sample_size,
+                durability_level=DURABILITY_LEVEL
+            )
+        # Drop bucket at the end
+        self.data_manager.drop_bucket(
+            bucket_name=BUCKET_NAME
+        )
+
+    def run_test_framework_homogeneous_service_layout(self):
         """ Analyze the impact of increasingly tuning durability within Couchbase cluster on operation latency;
         Higher durability should cause longer latencies. """
         # https://docs.couchbase.com/python-sdk/current/howtos/kv-operations.html#durability
@@ -327,7 +415,6 @@ class Driver:
                         operations_to_record=self.operation_sample_size,
                         durability_level=durability_level
                     )
-
                     # Flush bucket at the end
                     self.data_manager.flush_bucket(
                         bucket_name=bucket_size_label)
@@ -361,8 +448,13 @@ if __name__ == "__main__":
                         help='Clear all the nodes out from the current cluster')
     parser.add_argument('-f', '--flush-bucket', type=str,
                         help='flush a bucket; provide bucket name to flush as argument')
-    parser.add_argument('-t', '--test', action='store_true',
-                        help='run the automated test framework')
+    parser.add_argument('-thomo', '--test_homogeneous', action='store_true',
+                        help='run the automated test framework with homogeneous service layout')
+    parser.add_argument('-thetero', '--test_heterogeneous', action='store_true',
+                        help=(
+                            'run the automated test framework with heterogeneous service layout '
+                            '(reveals relationship between service layouts and latencies)')
+                        )
 
     parser.add_argument('-ycsb', '--ycsb', action='store_true',
                         help='run the YCSB framework')
@@ -372,7 +464,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.flush_bucket or args.clear_cluster or args.test or args.ycsb:
+    if args.flush_bucket or args.clear_cluster or args.test_heterogeneous or args.test_homogeneous or args.ycsb:
 
         driver = Driver(args.username, args.password, args.verbose,
                         small_data_sample_size=args.data_sample_size,
@@ -387,9 +479,10 @@ if __name__ == "__main__":
         driver.get_data_manager().flush_bucket(args.flush_bucket)
     elif args.clear_cluster:
         driver.get_cluster_manager().clear_cluster()
-    elif args.test:
-        # Analyze cluster size impact on performance
-        driver.run_test_framework()
+    elif args.test_homogeneous:
+        driver.run_test_framework_homogeneous_service_layout()
+    elif args.test_heterogeneous:
+        driver.run_test_framework_heterogeneous_service_layouts()
     elif args.ycsb:
         # Run Yahoo! Cloud Service Benchmark framework
         driver.run_ycsb()
