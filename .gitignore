@@ -1,8 +1,7 @@
 venv
 .env
-
+__pycache__
 couchbase
 random_docs
 *.pem
 setup-env.sh
-start-dev.sh

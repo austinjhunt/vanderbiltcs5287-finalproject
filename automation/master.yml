@@ -20,4 +20,15 @@
   gather_facts: yes
   roles:
     - couchbase-node
+
+- hosts: localvm
+  remote_user: vagrant
+  become: true
+  gather_facts: true
+  pre_tasks:
+    # set up the local VM with apt packages and python requirements before doing anything else
+    - name: Set up master playbook
+      import_tasks: setup-master.yml
+  roles:
+    - run-test-framework
 ...

@@ -150,38 +150,13 @@ class Driver:
             },
             {
                 'read': 1
-            },
-            {
-                'read': 0.9,
-                'insert': 0.1
-            },
-            {
-                'read': .1,
-                'insert': 0.9
-            },
-            {
-                'read': 0.9,
-                'update': 0.1,
-            },
-            {
-                'read': 0.1,
-                'update': 0.9,
-            },
-            {
-                'read': .5,
-                'update': .5,
-            },
-            {
-                'read': 0.5,
-                'insert': 0.5
             }
         ]
 
-        for recordcount in [1000, 100000]:
-            for fieldcount in [10, 500]:
-                for fieldlength_bytes in [10, 100]: # num bytes for each field
-                    for requestdistribution in [
-                        'uniform', 'zipfian', 'hotspot']:
+        for recordcount in [3000]: #[1000, 10000]:
+            for fieldcount in [10]: # , 500]:
+                for fieldlength_bytes in [10 , 100]: # num bytes for each field
+                    for requestdistribution in ['uniform']: #'zipfian', 'hotspot']: after finding that RD has small effect
                         for op_pro in operation_proportions:
                             self.data_manager.create_bucket(bucket_name=BUCKET_NAME, bucket_ram_quota_mb=1024, bucket_replicas=0)
                             self.cluster_manager.create_user_for_bucket(username=BUCKET_NAME, password=BUCKET_NAME, bucket_name=BUCKET_NAME)
@@ -254,7 +229,7 @@ class Driver:
             self.data_manager.drop_bucket(bucket_name=BUCKET_NAME)
             self.data_manager.create_bucket(
                 bucket_name=BUCKET_NAME,
-                bucket_ram_quota_mb=256,
+                bucket_ram_quota_mb=1024,
                 bucket_replicas=0)
             self.data_manager.create_scope(
                 scope_name=self.default_scope,
@@ -308,7 +283,8 @@ class Driver:
                 cluster_size=CLUSTER_SIZE,
                 bucket_name=BUCKET_NAME,
                 operations_to_record=self.operation_sample_size,
-                durability_level=DURABILITY_LEVEL
+                durability_level=DURABILITY_LEVEL,
+                service_layout=slayout
             )
         # Drop bucket at the end
         self.data_manager.drop_bucket(
@@ -484,9 +460,15 @@ if __name__ == "__main__":
     elif args.test_heterogeneous:
         driver.run_test_framework_heterogeneous_service_layouts()
     elif args.ycsb:
-        # Run Yahoo! Cloud Service Benchmark framework
         driver.run_ycsb()
-
     if args.plot:
         analyzer = Analyzer(verbose=args.verbose)
-        analyzer.plot()
+        if args.test_homogeneous:
+            analyzer.plot_homogeneous_tests()
+        if args.test_heterogeneous:
+            service_layout_impact_stats = analyzer.get_service_layout_latencies()
+            analyzer.plot_service_layout_impact_stats(
+                service_layout_impact_stats=service_layout_impact_stats)
+        if args.ycsb:
+            ycsb_stats = analyzer.collect_ycsb_stats_to_json()
+            analyzer.plot_ycsb_stats(ycsb_stats=ycsb_stats)
