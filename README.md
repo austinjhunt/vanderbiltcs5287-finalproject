@@ -60,7 +60,8 @@ pip install -r requirements.txt
 cd automation
 vagrant up --provision
 ```
-This will create 5 EC2 instances (t2.medium) and install Couchbase on each of them automatically; it may take a little bit of time, so be patient.
+This will create 5 EC2 instances (t2.xlarge) and install Couchbase on each of them automatically; it may take a little bit of time, so be patient.
+
 12. Wait :)
 13. Once tests start executing, you will be able to see data files being produced since the tests will be executing on the Vagrant VM, and that VM is mounted to the project folder. Keep an eye on the `src/lib/data` folder; that's where the raw data gets written, which is used for the plotting.
 
