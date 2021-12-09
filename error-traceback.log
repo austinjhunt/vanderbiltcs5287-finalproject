@@ -1,0 +1,169 @@
+(venv) huntaj-imac:src huntaj$ python driver.py -u admin -p 987456321 -v -ycsb
+Cluster Manager - Debug mode enabled
+Cluster Manager - Couchbase Endpoint URL (using leader public IP): couchbase://44.198.160.20
+Cluster Manager - Available Hosts:
+Cluster Manager - Leader (public IP): {'public': '44.198.160.20', 'private': '10.10.2.162'}
+Cluster Manager - Followers (private IPs): [{'public': '54.236.241.169', 'private': '10.10.2.160'}, {'public': '3.235.9.182', 'private': '10.10.2.52'}, {'public': '3.238.101.40', 'private': '10.10.2.61'}, {'public': '54.160.56.72', 'private': '10.10.2.152'}]
+Data Manager - Debug mode enabled
+DRIVER - Debug mode enabled
+Cluster Manager - ERROR: Cluster is already initialized, use setting-cluster to change settings
+
+Cluster Manager - Creating cluster (co-located services) of size 5 nodes
+Cluster Manager - Adding node (private IP=10.10.2.160) to cluster
+Cluster Manager - b'ERROR: Prepare join failed. Node is already part of cluster.\n'
+Cluster Manager - Adding node (private IP=10.10.2.52) to cluster
+Cluster Manager - b'ERROR: Prepare join failed. Node is already part of cluster.\n'
+Cluster Manager - Adding node (private IP=10.10.2.61) to cluster
+Cluster Manager - b'ERROR: Prepare join failed. Node is already part of cluster.\n'
+Cluster Manager - Adding node (private IP=10.10.2.152) to cluster
+Cluster Manager - b'ERROR: Prepare join failed. Node is already part of cluster.\n'
+Cluster Manager - Rebalancing cluster
+Cluster Manager - b'SUCCESS: Rebalance complete\n'
+Cluster Manager - Adding public address as alternate address for each cluster node
+Data Manager - Creating bucket ycsb_test_bucket with RAM quota 1024MB and 0 replicas
+ERROR: ramQuota - RAM quota specified is too large to be provisioned into this cluster.
+ERROR: name - Bucket with given name already exists
+Cluster Manager - Creating user with username ycsb_test_bucket and password ycsb_test_bucket with role bucket_full_access on bucket=* using couchbase URL couchbase://44.198.160.20
+Cluster Manager - Cluster: <couchbase_core.client.Cluster bucket=, nodes=['54.160.56.72:8091', '54.236.241.169:8091', '44.198.160.20:8091', '3.235.9.182:8091', '3.238.101.40:8091'] at 0x7fabd071e580>
+Cluster Manager - User Manager: <couchbase.management.users.UserManager object at 0x7fabd0737c10>
+Cluster Manager - Upserting user: <couchbase.management.users.User object at 0x7fabd0737be0>
+Cluster Manager - None
+Data Manager - Flushing bucket ycsb_test_bucket
+Running this command will totally PURGE database data from disk. Do you really want to do it? (Yes/No)SUCCESS: Bucket flushed
+Data Manager - Creating scope default_scope on bucket ycsb_test_bucket
+SUCCESS: Scope created
+Data Manager - None
+Data Manager - Creating primary index default_primary_index_ycsb_test_bucket on `ycsb_test_bucket`
+Data Manager - <couchbase.n1ql.QueryResult object at 0x7fabd0737790>
+Data Manager - Creating collection default_collection on bucket ycsb_test_bucket
+SUCCESS: Collection created
+Data Manager - None
+DRIVER - RUNNING YSCB LOAD DATA COMMAND:
+ycsb/bin/ycsb load couchbase2 -s  -p couchbase.host=44.198.160.20  -p couchbase.bucket=ycsb_test_bucket  -p couchbase.password=ycsb_test_bucket  -p couchbase.persistTo=0  -p couchbase.replicateTo=0  -p fieldcount=10  -p fieldlength=10  -p recordcount=1000  -p operationcount=1000  -p workload=site.ycsb.workloads.CoreWorkload  -p readallfields=true  -p readproportion=0.75  -p updateproportion=0  -p scanproportion=0  -p insertproportion=0.25  -p requestdistribution=zipfian  -p measurementtype=raw
+java -cp /Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/conf:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/conf:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/lib/htrace-core4-4.1.0-incubating.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/lib/HdrHistogram-2.1.4.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/lib/core-0.17.0.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/lib/jackson-mapper-asl-1.9.4.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/lib/jackson-core-asl-1.9.4.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/lib/couchbase2-binding-0.17.0.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/lib/rxjava-1.1.5.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/lib/java-client-2.3.1.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/lib/core-io-1.3.1.jar site.ycsb.Client -db site.ycsb.db.couchbase2.Couchbase2Client -s -p couchbase.host=44.198.160.20 -p couchbase.bucket=ycsb_test_bucket -p couchbase.password=ycsb_test_bucket -p couchbase.persistTo=0 -p couchbase.replicateTo=0 -p fieldcount=10 -p fieldlength=10 -p recordcount=1000 -p operationcount=1000 -p workload=site.ycsb.workloads.CoreWorkload -p readallfields=true -p readproportion=0.75 -p updateproportion=0 -p scanproportion=0 -p insertproportion=0.25 -p requestdistribution=zipfian -p measurementtype=raw -load
+Command line: -db site.ycsb.db.couchbase2.Couchbase2Client -s -p couchbase.host=44.198.160.20 -p couchbase.bucket=ycsb_test_bucket -p couchbase.password=ycsb_test_bucket -p couchbase.persistTo=0 -p couchbase.replicateTo=0 -p fieldcount=10 -p fieldlength=10 -p recordcount=1000 -p operationcount=1000 -p workload=site.ycsb.workloads.CoreWorkload -p readallfields=true -p readproportion=0.75 -p updateproportion=0 -p scanproportion=0 -p insertproportion=0.25 -p requestdistribution=zipfian -p measurementtype=raw -load
+YCSB Client 0.17.0
+
+Loading workload...
+Starting test.
+WARNING: An illegal reflective access operation has occurred
+WARNING: Illegal reflective access by com.couchbase.client.deps.io.netty.util.internal.PlatformDependent0 (file:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/lib/core-io-1.3.1.jar) to field java.nio.Buffer.address
+WARNING: Please consider reporting this to the maintainers of com.couchbase.client.deps.io.netty.util.internal.PlatformDependent0
+WARNING: Use --illegal-access=warn to enable warnings of further illegal reflective access operations
+WARNING: All illegal access operations will be denied in a future release
+2021-11-27 21:02:25:383 0 sec: 0 operations; est completion in 0 second
+Nov 27, 2021 9:02:25 PM com.couchbase.client.deps.io.netty.util.internal.PlatformDependent <clinit>
+INFO: Your platform does not provide complete low-level API for accessing direct buffers reliably. Unless explicitly requested, heap buffer will always be preferred to avoid potential system unstability.
+Nov 27, 2021 9:02:25 PM site.ycsb.db.couchbase2.Couchbase2Client logParams
+INFO: ===> Using Params: host=44.198.160.20, bucket=ycsb_test_bucket, upsert=false, persistTo=NONE, replicateTo=NONE, syncMutResponse=true, adhoc=false, kv=true, maxParallelism=1, queryEndpoints=1, kvEndpoints=1, queryEndpoints=1, epoll=false, boost=3, networkMetricsInterval=0, runtimeMetricsInterval=0
+Nov 27, 2021 9:02:25 PM com.couchbase.client.core.CouchbaseCore <init>
+INFO: CouchbaseEnvironment: {sslEnabled=false, sslKeystoreFile='null', sslKeystorePassword=false, sslKeystore=null, bootstrapHttpEnabled=true, bootstrapCarrierEnabled=true, bootstrapHttpDirectPort=8091, bootstrapHttpSslPort=18091, bootstrapCarrierDirectPort=11210, bootstrapCarrierSslPort=11207, ioPoolSize=4, computationPoolSize=4, responseBufferSize=16384, requestBufferSize=16384, kvServiceEndpoints=1, viewServiceEndpoints=1, queryServiceEndpoints=1, searchServiceEndpoints=1, ioPool=NioEventLoopGroup, coreScheduler=CoreScheduler, eventBus=DefaultEventBus, packageNameAndVersion=couchbase-java-client/2.3.1 (git: 2.3.1, core: 1.3.1), dcpEnabled=false, retryStrategy=BestEffort, maxRequestLifetime=75000, retryDelay=ExponentialDelay{growBy 1.0 MICROSECONDS, powers of 2; lower=100, upper=100000}, reconnectDelay=ExponentialDelay{growBy 1.0 MILLISECONDS, powers of 2; lower=32, upper=4096}, observeIntervalDelay=ExponentialDelay{growBy 1.0 MICROSECONDS, powers of 2; lower=10, upper=100000}, keepAliveInterval=30000, autoreleaseAfter=2000, bufferPoolingEnabled=true, tcpNodelayEnabled=true, mutationTokensEnabled=false, socketConnectTimeout=10000, dcpConnectionBufferSize=20971520, dcpConnectionBufferAckThreshold=0.2, dcpConnectionName=dcp/core-io, callbacksOnIoPool=true, disconnectTimeout=25000, requestBufferWaitStrategy=com.couchbase.client.core.env.DefaultCoreEnvironment$2@4b490d89, queryTimeout=75000, viewTimeout=75000, kvTimeout=10000, connectTimeout=30000, dnsSrvEnabled=false}
+Nov 27, 2021 9:02:25 PM com.couchbase.client.core.node.CouchbaseNode signalConnected
+INFO: Connected to Node ec2-44-198-160-20.compute-1.amazonaws.com
+Nov 27, 2021 9:02:26 PM com.couchbase.client.core.config.DefaultConfigurationProvider$8 call
+INFO: Opened bucket ycsb_test_bucket
+Nov 27, 2021 9:02:26 PM com.couchbase.client.core.node.CouchbaseNode signalDisconnected
+INFO: Disconnected from Node ec2-44-198-160-20.compute-1.amazonaws.com
+DBWrapper: report latency for each error is false and specific error codes to track for latency are: []
+2021-11-27 21:02:35:342 10 sec: 0 operations; est completion in 106751991167300 days 15 hours
+java.lang.RuntimeException: java.util.concurrent.TimeoutException
+        at com.couchbase.client.java.util.Blocking.blockForSingle(Blocking.java:71)
+        at site.ycsb.db.couchbase2.Couchbase2Client.waitForMutationResponse(Couchbase2Client.java:732)
+        at site.ycsb.db.couchbase2.Couchbase2Client.insertKv(Couchbase2Client.java:418)
+        at site.ycsb.db.couchbase2.Couchbase2Client.insert(Couchbase2Client.java:392)
+        at site.ycsb.DBWrapper.insert(DBWrapper.java:221)
+        at site.ycsb.workloads.CoreWorkload.doInsert(CoreWorkload.java:601)
+        at site.ycsb.ClientThread.run(ClientThread.java:135)
+        at java.base/java.lang.Thread.run(Thread.java:832)
+Caused by: java.util.concurrent.TimeoutException
+        ... 8 more
+Raw data measurement: will output to stdout.
+Raw data measurement: will output to stdout.
+Error inserting, not retrying any more. number of attempts: 1Insertion Retry Limit: 0
+Raw data measurement: will output to stdout.
+2021-11-27 21:02:36:274 10 sec: 0 operations; est completion in 106751991167300 days 15 hours CLEANUP count: 1, average latency(us): 1.00  INSERT-FAILED count: 1, average latency(us): 10013113.00
+CLEANUP latency raw data: op, timestamp(ms), latency(us)
+CLEANUP,1638064956273,1
+INSERT latency raw data: op, timestamp(ms), latency(us)
+INSERT-FAILED latency raw data: op, timestamp(ms), latency(us)
+INSERT-FAILED,1638064956273,10013113
+[OVERALL], RunTime(ms), 10934
+[OVERALL], Throughput(ops/sec), 0.0
+[TOTAL_GCS_G1_Young_Generation], Count, 2
+[TOTAL_GC_TIME_G1_Young_Generation], Time(ms), 12
+[TOTAL_GC_TIME_%_G1_Young_Generation], Time(%), 0.1097494055240534
+[TOTAL_GCS_G1_Old_Generation], Count, 0
+[TOTAL_GC_TIME_G1_Old_Generation], Time(ms), 0
+[TOTAL_GC_TIME_%_G1_Old_Generation], Time(%), 0.0
+[TOTAL_GCs], Count, 2
+[TOTAL_GC_TIME], Time(ms), 12
+[TOTAL_GC_TIME_%], Time(%), 0.1097494055240534
+[CLEANUP], Total Operations, 1
+[CLEANUP], Below is a summary of latency in microseconds:, -1
+[CLEANUP], Average, 1.0
+[CLEANUP], Min, 1
+[CLEANUP], Max, 1
+[CLEANUP], p1, 1
+[CLEANUP], p5, 1
+[CLEANUP], p50, 1
+[CLEANUP], p90, 1
+[CLEANUP], p95, 1
+[CLEANUP], p99, 1
+[CLEANUP], p99.9, 1
+[CLEANUP], p99.99, 1
+[INSERT], Total Operations, 0
+[INSERT], Return=ERROR, 1
+[INSERT-FAILED], Total Operations, 1
+[INSERT-FAILED], Below is a summary of latency in microseconds:, -1
+[INSERT-FAILED], Average, 1.0013113E7
+[INSERT-FAILED], Min, 10013113
+[INSERT-FAILED], Max, 10013113
+[INSERT-FAILED], p1, 10013113
+[INSERT-FAILED], p5, 10013113
+[INSERT-FAILED], p50, 10013113
+[INSERT-FAILED], p90, 10013113
+[INSERT-FAILED], p95, 10013113
+[INSERT-FAILED], p99, 10013113
+[INSERT-FAILED], p99.9, 10013113
+[INSERT-FAILED], p99.99, 10013113
+DRIVER - RUNNING YSCB RUN COMMAND:
+ycsb/bin/ycsb run couchbase2 -s  -p couchbase.host=44.198.160.20  -p couchbase.bucket=ycsb_test_bucket  -p couchbase.password=ycsb_test_bucket  -p couchbase.persistTo=0  -p couchbase.replicateTo=0  -p fieldcount=10  -p fieldlength=10  -p recordcount=1000  -p operationcount=1000  -p workload=site.ycsb.workloads.CoreWorkload  -p readallfields=true  -p readproportion=0.75  -p updateproportion=0  -p scanproportion=0  -p insertproportion=0.25  -p requestdistribution=zipfian  -p measurementtype=raw
+java -cp /Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/conf:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/conf:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/lib/htrace-core4-4.1.0-incubating.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/lib/HdrHistogram-2.1.4.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/lib/core-0.17.0.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/lib/jackson-mapper-asl-1.9.4.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/lib/jackson-core-asl-1.9.4.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/lib/couchbase2-binding-0.17.0.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/lib/rxjava-1.1.5.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/lib/java-client-2.3.1.jar:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/lib/core-io-1.3.1.jar site.ycsb.Client -db site.ycsb.db.couchbase2.Couchbase2Client -s -p couchbase.host=44.198.160.20 -p couchbase.bucket=ycsb_test_bucket -p couchbase.password=ycsb_test_bucket -p couchbase.persistTo=0 -p couchbase.replicateTo=0 -p fieldcount=10 -p fieldlength=10 -p recordcount=1000 -p operationcount=1000 -p workload=site.ycsb.workloads.CoreWorkload -p readallfields=true -p readproportion=0.75 -p updateproportion=0 -p scanproportion=0 -p insertproportion=0.25 -p requestdistribution=zipfian -p measurementtype=raw -t
+Command line: -db site.ycsb.db.couchbase2.Couchbase2Client -s -p couchbase.host=44.198.160.20 -p couchbase.bucket=ycsb_test_bucket -p couchbase.password=ycsb_test_bucket -p couchbase.persistTo=0 -p couchbase.replicateTo=0 -p fieldcount=10 -p fieldlength=10 -p recordcount=1000 -p operationcount=1000 -p workload=site.ycsb.workloads.CoreWorkload -p readallfields=true -p readproportion=0.75 -p updateproportion=0 -p scanproportion=0 -p insertproportion=0.25 -p requestdistribution=zipfian -p measurementtype=raw -t
+YCSB Client 0.17.0
+
+Loading workload...
+Starting test.
+WARNING: An illegal reflective access operation has occurred
+WARNING: Illegal reflective access by com.couchbase.client.deps.io.netty.util.internal.PlatformDependent0 (file:/Users/huntaj/dev/vandy/Fall2021/cs5287/vanderbiltcs5287-finalproject/src/ycsb/couchbase2-binding/lib/core-io-1.3.1.jar) to field java.nio.Buffer.address
+WARNING: Please consider reporting this to the maintainers of com.couchbase.client.deps.io.netty.util.internal.PlatformDependent0
+WARNING: Use --illegal-access=warn to enable warnings of further illegal reflective access operations
+WARNING: All illegal access operations will be denied in a future release
+2021-11-27 21:02:36:647 0 sec: 0 operations; est completion in 0 second
+Nov 27, 2021 9:02:36 PM com.couchbase.client.deps.io.netty.util.internal.PlatformDependent <clinit>
+INFO: Your platform does not provide complete low-level API for accessing direct buffers reliably. Unless explicitly requested, heap buffer will always be preferred to avoid potential system unstability.
+Nov 27, 2021 9:02:36 PM site.ycsb.db.couchbase2.Couchbase2Client logParams
+INFO: ===> Using Params: host=44.198.160.20, bucket=ycsb_test_bucket, upsert=false, persistTo=NONE, replicateTo=NONE, syncMutResponse=true, adhoc=false, kv=true, maxParallelism=1, queryEndpoints=1, kvEndpoints=1, queryEndpoints=1, epoll=false, boost=3, networkMetricsInterval=0, runtimeMetricsInterval=0
+Nov 27, 2021 9:02:36 PM com.couchbase.client.core.CouchbaseCore <init>
+INFO: CouchbaseEnvironment: {sslEnabled=false, sslKeystoreFile='null', sslKeystorePassword=false, sslKeystore=null, bootstrapHttpEnabled=true, bootstrapCarrierEnabled=true, bootstrapHttpDirectPort=8091, bootstrapHttpSslPort=18091, bootstrapCarrierDirectPort=11210, bootstrapCarrierSslPort=11207, ioPoolSize=4, computationPoolSize=4, responseBufferSize=16384, requestBufferSize=16384, kvServiceEndpoints=1, viewServiceEndpoints=1, queryServiceEndpoints=1, searchServiceEndpoints=1, ioPool=NioEventLoopGroup, coreScheduler=CoreScheduler, eventBus=DefaultEventBus, packageNameAndVersion=couchbase-java-client/2.3.1 (git: 2.3.1, core: 1.3.1), dcpEnabled=false, retryStrategy=BestEffort, maxRequestLifetime=75000, retryDelay=ExponentialDelay{growBy 1.0 MICROSECONDS, powers of 2; lower=100, upper=100000}, reconnectDelay=ExponentialDelay{growBy 1.0 MILLISECONDS, powers of 2; lower=32, upper=4096}, observeIntervalDelay=ExponentialDelay{growBy 1.0 MICROSECONDS, powers of 2; lower=10, upper=100000}, keepAliveInterval=30000, autoreleaseAfter=2000, bufferPoolingEnabled=true, tcpNodelayEnabled=true, mutationTokensEnabled=false, socketConnectTimeout=10000, dcpConnectionBufferSize=20971520, dcpConnectionBufferAckThreshold=0.2, dcpConnectionName=dcp/core-io, callbacksOnIoPool=true, disconnectTimeout=25000, requestBufferWaitStrategy=com.couchbase.client.core.env.DefaultCoreEnvironment$2@4b490d89, queryTimeout=75000, viewTimeout=75000, kvTimeout=10000, connectTimeout=30000, dnsSrvEnabled=false}
+Nov 27, 2021 9:02:37 PM com.couchbase.client.core.node.CouchbaseNode signalConnected
+INFO: Connected to Node ec2-44-198-160-20.compute-1.amazonaws.com
+Nov 27, 2021 9:02:37 PM com.couchbase.client.core.config.DefaultConfigurationProvider$8 call
+INFO: Opened bucket ycsb_test_bucket
+Nov 27, 2021 9:02:37 PM com.couchbase.client.core.node.CouchbaseNode signalDisconnected
+INFO: Disconnected from Node ec2-44-198-160-20.compute-1.amazonaws.com
+DBWrapper: report latency for each error is false and specific error codes to track for latency are: []
+2021-11-27 21:02:46:606 10 sec: 0 operations; est completion in 106751991167300 days 15 hours
+java.lang.RuntimeException: java.util.concurrent.TimeoutException
+        at com.couchbase.client.java.util.Blocking.blockForSingle(Blocking.java:71)
+        at com.couchbase.client.java.CouchbaseBucket.get(CouchbaseBucket.java:144)
+        at com.couchbase.client.java.CouchbaseBucket.get(CouchbaseBucket.java:139)
+        at site.ycsb.db.couchbase2.Couchbase2Client.readKv(Couchbase2Client.java:268)
+        at site.ycsb.db.couchbase2.Couchbase2Client.read(Couchbase2Client.java:248)
+        at site.ycsb.DBWrapper.read(DBWrapper.java:135)
+        at site.ycsb.workloads.CoreWorkload.doTransactionRead(CoreWorkload.java:722)
+        at site.ycsb.workloads.CoreWorkload.doTransaction(CoreWorkload.java:644)
+        at site.ycsb.ClientThread.run(ClientThread.java:122)
+        at java.base/java.lang.Thread.run(Thread.java:832)
+Caused by: java.util.concurrent.TimeoutException
+        ... 10 more

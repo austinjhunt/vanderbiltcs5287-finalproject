@@ -75,13 +75,18 @@
         - 8091-8097
         - 4369
         - 9100-9105
-        - 9110-9118
+        - 9110-9119
         - 9120-9122
         - 9130
         - 9140
-        - 9999
+        - 9998-9999
         - 11206-11211
+        - 11213
         - 21100
+        - 21200
+        - 21300
+        - 21250
+        - 21350
         - 18091-18097
         - 19102
         - 19130
@@ -108,7 +113,7 @@
       # Add tags so you can start / stop by tags. Running twice should not create duplicates.
       app: cs5287final
     key_name: aws-keypair3
-    instance_type: t2.medium
+    instance_type: t2.xlarge
     vpc_subnet_id: "{{ cs5287final_vpc_subnet.subnet.id }}"
     network:
       assign_public_ip: yes
@@ -138,7 +143,7 @@
       # Add tags so you can start / stop by tags. Running twice should not create duplicates.
       app: cs5287final
     key_name: aws-keypair3
-    instance_type: t2.medium
+    instance_type: t2.xlarge
     vpc_subnet_id: "{{ cs5287final_vpc_subnet.subnet.id }}"
     network:
       assign_public_ip: yes
@@ -169,7 +174,7 @@
       # Add tags so you can start / stop by tags. Running twice should not create duplicates.
       app: cs5287final
     key_name: aws-keypair3
-    instance_type: t2.medium
+    instance_type: t2.xlarge
     vpc_subnet_id: "{{ cs5287final_vpc_subnet.subnet.id }}"
     network:
       assign_public_ip: yes
@@ -199,7 +204,7 @@
       # Add tags so you can start / stop by tags. Running twice should not create duplicates.
       app: cs5287final
     key_name: aws-keypair3
-    instance_type: t2.medium
+    instance_type: t2.xlarge
     vpc_subnet_id: "{{ cs5287final_vpc_subnet.subnet.id }}"
     network:
       assign_public_ip: yes
@@ -230,7 +235,7 @@
       # Add tags so you can start / stop by tags. Running twice should not create duplicates.
       app: cs5287final
     key_name: aws-keypair3
-    instance_type: t2.medium
+    instance_type: t2.xlarge
     vpc_subnet_id: "{{ cs5287final_vpc_subnet.subnet.id }}"
     network:
       assign_public_ip: yes
@@ -282,42 +287,47 @@
     state: started
   with_items: "{{ ec2_5.instances }}"
 
-- name: Add EC2 instance 1 to group "cloud"
+- name: Add EC2 instance 1 to groups "cloud" and "couchbase-leader"
   add_host:
     name: "{{ item.public_ip_address }}"
     ansible_ssh_private_key_file: "{{ playbook_dir }}/.ssh/aws-keypair3.pem"
     groups:
       - cloud
+      - couchbase-leader
   with_items: "{{ ec2_1.instances }}"
 
-- name: Add EC2 instance 2 to group "cloud"
+- name: Add EC2 instance 2 to group "cloud" and "couchbase-follower"
   add_host:
     name: "{{ item.public_ip_address }}"
     ansible_ssh_private_key_file: "{{ playbook_dir }}/.ssh/aws-keypair3.pem"
     groups:
       - cloud
+      - couchbase-follower
   with_items: "{{ ec2_2.instances }}"
 
-- name: Add EC2 instance 3 to group "cloud"
+- name: Add EC2 instance 3 to group "cloud" and "couchbase-follower"
   add_host:
     name: "{{ item.public_ip_address }}"
     ansible_ssh_private_key_file: "{{ playbook_dir }}/.ssh/aws-keypair3.pem"
     groups:
       - cloud
+      - couchbase-follower
   with_items: "{{ ec2_3.instances }}"
 
-- name: Add EC2 instance 4 to group "cloud"
+- name: Add EC2 instance 4 to group "cloud" and "couchbase-follower"
   add_host:
     name: "{{ item.public_ip_address }}"
     ansible_ssh_private_key_file: "{{ playbook_dir }}/.ssh/aws-keypair3.pem"
     groups:
       - cloud
+      - couchbase-follower
   with_items: "{{ ec2_4.instances }}"
 
-- name: Add EC2 instance 5 to group "cloud"
+- name: Add EC2 instance 5 to group "cloud" and "couchbase-follower"
   add_host:
     name: "{{ item.public_ip_address }}"
     ansible_ssh_private_key_file: "{{ playbook_dir }}/.ssh/aws-keypair3.pem"
     groups:
       - cloud
+      - couchbase-follower
   with_items: "{{ ec2_5.instances }}"

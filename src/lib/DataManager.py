@@ -35,7 +35,7 @@ class DataManager:
                 self.password
             )
         )
-        self.bucket_ram_quota_mb = 256
+        self.bucket_ram_quota_mb = 1024
         self.bucket_replica_number = 2
 
     def set_bucket_replica_number(self, new_replica_number):
@@ -75,26 +75,45 @@ class DataManager:
         response = requests.post(install_sample_bucket_url, data=json.dumps(data), auth=(self.username,self.password))
         self.info(response.json())
 
-    def create_primary_index(self, bucket_name=""):
-        index_name = f'default_primary_index_{bucket_name.replace("-","_")}'
-        self.info(f'Creating primary index {index_name} on `{bucket_name}`')
-        response = self.cluster.query(
-            f'CREATE PRIMARY INDEX {index_name} ON `{bucket_name}`'
-        )
-        self.info(response)
-        return response
+    def create_primary_index(self, bucket_name="", using_ycsb=False ):
+        self.info(f'Creating primary index on `{bucket_name}`;')
+        if using_ycsb:
+            # Fix error: Caused by: com.couchbase.client.core.CouchbaseException: N1qlQuery Error - {"msg":"No
+            # index available on keyspace `default`:`ycsb_test_bucket` that matches your query.
+            #  Use CREATE PRIMARY INDEX ON `default`:`ycsb_test_bucket` to create a primary index,
+            # or check that your expected index is online.","code":4000}
+            query = f'CREATE PRIMARY INDEX ON `default`:`{bucket_name}`'
+        else:
+            index_name = f'default_primary_index_{bucket_name.replace("-","_")}'
+            query = f'CREATE PRIMARY INDEX `{index_name}` ON `{bucket_name}`'
+        try:
+            response = self.cluster.query(f'CREATE PRIMARY INDEX ON `default`:`{bucket_name}`')
+            for r in response.rows():
+                self.info(r)
+            return response
+        except:
+            return None
 
-    def create_bucket(self, bucket_name=""):
+
+    def create_bucket(self, bucket_name="", bucket_ram_quota_mb=1024, bucket_replicas=0):
         """ Create and return a bucket """
         self.info(
-            f"Creating bucket {bucket_name} with RAM quota {self.bucket_ram_quota_mb}MB "
-            f"and {self.bucket_replica_number} replicas"
+            f"Creating bucket {bucket_name} with RAM quota {bucket_ram_quota_mb}MB "
+            f"and {bucket_replicas} replicas"
             )
         create_bucket_cmd = (
-            f'couchbase-cli bucket-create -c {self.couchbase_endpoint} --username {self.username} --password {self.password} '
-            f'--bucket {bucket_name} --bucket-type couchbase --durability-min-level majority '
-            f'--bucket-ramsize {self.bucket_ram_quota_mb} --bucket-replica {self.bucket_replica_number} '
-            f'--enable-flush 1 --conflict-resolution sequence --wait '
+            f'couchbase-cli bucket-create '
+            f'-c {self.couchbase_endpoint} '
+            f'--username {self.username} '
+            f'--password {self.password} '
+            f'--bucket {bucket_name} '
+            f'--bucket-type couchbase '
+            f'--durability-min-level none '
+            f'--bucket-ramsize {bucket_ram_quota_mb} '
+            f'--bucket-replica {bucket_replicas} '
+            f'--enable-flush 1 '
+            f'--conflict-resolution sequence '
+            f'--wait '
         )
         process = subprocess.Popen(create_bucket_cmd.split())
         output, error = process.communicate()
@@ -105,10 +124,18 @@ class DataManager:
                 # Simply update the replica number
                 self.info(f'Bucket {bucket_name} already exists, just applying updates (updated_replica_num={self.bucket_replica_number})')
                 create_bucket_cmd = (
-                    f'couchbase-cli bucket-edit -c {self.couchbase_endpoint} --username {self.username} --password {self.password} '
-                    f'--bucket {bucket_name} --bucket-type couchbase --durability-min-level majority '
-                    f'--bucket-ramsize {self.bucket_ram_quota_mb} --bucket-replica {self.bucket_replica_number} '
-                    f'--enable-flush 1 --conflict-resolution sequence --wait '
+                    f'couchbase-cli bucket-edit '
+                    f'-c {self.couchbase_endpoint} '
+                    f'--username {self.username} '
+                    f'--password {self.password} '
+                    f'--bucket {bucket_name} '
+                    f'--bucket-type couchbase '
+                    f'--durability-min-level none '
+                    f'--bucket-ramsize {self.bucket_ram_quota_mb} '
+                    f'--bucket-replica {self.bucket_replica_number} '
+                    f'--enable-flush 1 '
+                    f'--conflict-resolution sequence '
+                    f'--wait '
                 )
                 process = subprocess.Popen(create_bucket_cmd.split())
                 output, error = process.communicate()
@@ -122,8 +149,11 @@ class DataManager:
         """ Create a collection """
         self.info(f'Creating scope {scope_name} on bucket {bucket_name}')
         cmd = (
-            f'couchbase-cli collection-manage --cluster {self.couchbase_endpoint} '
-            f'--username {self.username} --password {self.password} --create-scope {scope_name} '
+            f'couchbase-cli collection-manage '
+            f'--cluster {self.couchbase_endpoint} '
+            f'--username {self.username} '
+            f'--password {self.password} '
+            f'--create-scope {scope_name} '
             f'--bucket {bucket_name}'
         )
         process = subprocess.Popen(cmd.split())
@@ -149,6 +179,23 @@ class DataManager:
         self.debug(output)
         return output
 
+    def drop_bucket(self, bucket_name=""):
+        """ Drop a bucket from the database """
+        cmd = (
+            f'couchbase-cli bucket-delete '
+            f'--cluster {self.couchbase_endpoint} '
+            f'--username {self.username} '
+            f'--password {self.password} '
+            f'--bucket {bucket_name}'
+        )
+        process = subprocess.Popen(cmd, shell=True)
+        output, error = process.communicate()
+        if error and error != "None":
+            self.error(error)
+        if output and output != "None":
+            self.info(output)
+        return output
+
     def flush_bucket(self, bucket_name=""):
         self.info(f"Flushing bucket {bucket_name}")
         cmd = (
@@ -163,10 +210,13 @@ class DataManager:
             self.info(output)
         return output
 
-    def init_data_file(self, cluster_size=1, bucket_name="small-bucket", operation="insert",  durability_level=""):
+    def init_data_file(self, cluster_size=1, bucket_name="small-bucket", operation="insert",  durability_level="", service_layout=None):
         """ Initialize an empty file to which operation latency data can be written during execution;
         Use cluster_size + 1 for folder name because cluster_size excludes leader. (cluster_size = 0 is just leader) """
-        folder = f'data/durability-{durability_level}/cluster-size-{cluster_size + 1}/{bucket_name}/{operation}'
+        if service_layout:
+            folder = f'data/durability-{durability_level}/cluster-size-{cluster_size + 1}/{bucket_name}/{operation}/{service_layout.get_simple_name()}'
+        else:
+            folder = f'data/durability-{durability_level}/cluster-size-{cluster_size + 1}/{bucket_name}/{operation}'
         full_folder = os.path.join(
             os.path.dirname(__file__), folder
         )
@@ -176,14 +226,16 @@ class DataManager:
         return data_file
 
 
-    def run_inserts(self, cluster_size=1, bucket_name="", num_docs=1000, operations_to_record=100,durability_level="low"):
+    def run_inserts(self, cluster_size=1, bucket_name="", num_docs=1000, operations_to_record=100,
+        durability_level="low", service_layout=None):
         """ Insert num_docs random JSON documents into the specified bucket """
         # Write all the insert latency data to this file
         data_file_name = self.init_data_file(
             cluster_size=cluster_size,
             bucket_name=bucket_name,
             operation='insert',
-            durability_level=durability_level
+            durability_level=durability_level,
+            service_layout=service_layout
         )
         self.info(f'Running {num_docs} Insert operations (only RECORDING {operations_to_record})...')
         operations_recorded = 0
@@ -204,13 +256,15 @@ class DataManager:
                     )
                 operations_recorded += 1
 
-    def run_n1ql_selects(self,  cluster_size=1, bucket_name="", operations_to_record=100,durability_level="low"):
+    def run_n1ql_selects(self,  cluster_size=1, bucket_name="", operations_to_record=100,durability_level="low",
+        service_layout=None):
         """ Run operations_to_record N1QLQueryOperations on provide bucket """
         data_file_name = self.init_data_file(
             cluster_size=cluster_size,
             bucket_name=bucket_name,
             operation="n1qlselect",
-            durability_level=durability_level)
+            durability_level=durability_level,
+            service_layout=service_layout)
         self.info(f'Running {operations_to_record} N1QL SELECT [...] operations...')
         with yaspin().white.bold.shark.on_blue as sp:
             for i in range(operations_to_record):
@@ -227,7 +281,8 @@ class DataManager:
                     record_operation_latency=True
                     )
 
-    def run_full_text_searches(self,  cluster_size=1, bucket_name="", operations_to_record=100,durability_level="low"):
+    def run_full_text_searches(self,  cluster_size=1, bucket_name="", operations_to_record=100,
+        durability_level="low", service_layout=None):
         """ Run operations_to_record N1QLQueryOperations on provide bucket """
         # Write all the insert latency data to this file
         self.info(f'Running {operations_to_record} Full Text Search operations...')
@@ -235,7 +290,8 @@ class DataManager:
             cluster_size=cluster_size,
             bucket_name=bucket_name,
             operation="fts",
-            durability_level=durability_level
+            durability_level=durability_level,
+            service_layout=service_layout
         )
         with yaspin().white.bold.shark.on_blue as sp:
             for i in range(operations_to_record):
@@ -252,13 +308,16 @@ class DataManager:
                     record_operation_latency=True
                 )
 
-    def run_updates(self, cluster_size=1, bucket_name="", operations_to_record=100,durability_level="low"):
+    def run_updates(self, cluster_size=1, bucket_name="", operations_to_record=100,durability_level="low",
+        service_layout=None):
         self.info(f'Running {operations_to_record} Update operations...')
         data_file_name = self.init_data_file(
             cluster_size=cluster_size,
             bucket_name=bucket_name,
             operation='update',
-            durability_level=durability_level)
+            durability_level=durability_level,
+            service_layout=service_layout)
+
         with yaspin().white.bold.shark.on_blue as sp:
             for i in range(operations_to_record):
                 self.database_operation_commander.execute_operation(
@@ -273,13 +332,15 @@ class DataManager:
                         record_operation_latency=True
                     )
 
-    def delete_docs_in_bucket(self, cluster_size=1, bucket_name="", operations_to_record=100,durability_level="low"):
+    def delete_docs_in_bucket(self, cluster_size=1, bucket_name="", operations_to_record=100,
+        durability_level="low", service_layout=None):
         self.info(f'Running {operations_to_record} Delete operations...')
         data_file_name = self.init_data_file(
             cluster_size=cluster_size,
             bucket_name=bucket_name,
             operation='delete',
-            durability_level=durability_level)
+            durability_level=durability_level,
+            service_layout=service_layout)
         with yaspin().white.bold.shark.on_blue as sp:
             for i in range(operations_to_record):
                 self.database_operation_commander.execute_operation(

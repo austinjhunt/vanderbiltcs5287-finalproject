@@ -6,9 +6,12 @@
 # Now install couchbase
 - name: Download the meta package
   command: curl -O https://packages.couchbase.com/releases/couchbase-release/couchbase-release-1.0-amd64.deb
+
 - name: Install the meta package
   command: dpkg -i ./couchbase-release-1.0-amd64.deb
+
 - name: Reload the local package database
   command: apt update
+
 - name: Install (and auto-start) Couchbase Server
   command: apt install couchbase-server-community

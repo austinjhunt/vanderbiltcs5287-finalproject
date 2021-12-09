@@ -1,0 +1,17 @@
+- name: Run setup.py to set up a test dataset and the hosts.json file with addresses of new EC2 instances
+  command: python3 /vagrant/setup.py
+
+- name: Run the framework driver (driver.py) to test homogeneous architectures and generate plots
+  command:
+    chdir: /vagrant/src
+    cmd: python3 driver.py --username admin --password 123456 --verbose --test_homogeneous --plot
+
+- name: Run the framework driver (driver.py) to test heterogeneous architectures and generate plots
+  command:
+    chdir: /vagrant/src
+    cmd: python3 driver.py --username admin --password 123456 --verbose --test_heterogeneous --plot
+
+- name: Run the framework driver (driver.py) to test with YCSB and generate plots
+  command:
+    chdir: /vagrant/src
+    cmd: python3 driver.py --username admin --password 123456 --verbose --ycsb --plot

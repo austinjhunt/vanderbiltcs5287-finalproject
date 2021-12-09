@@ -6,7 +6,15 @@ from matplotlib import cm
 from pathlib import Path
 import numpy as np
 import logging
+import sys
+import json
+from collections import OrderedDict
 from tabulate import tabulate
+import random
+
+def avg(array):
+    array = [el for el in array if isinstance(el, int) or isinstance(el, float)]
+    return sum(array) / len(array)
 class Analyzer:
     def __init__(self,verbose=False):
         self.data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),'data')
@@ -31,6 +39,7 @@ class Analyzer:
             self.logger.debug('Debug mode enabled', extra=self.prefix )
         else:
             self.logger.setLevel(logging.INFO)
+
     def debug(self, msg):
         self.logger.debug(msg, extra=self.prefix)
 
@@ -245,7 +254,7 @@ class Analyzer:
             plt.plot(x, _mins, label="minimum", linestyle="--")
             plt.plot(x, _maxes, label="maximum", linestyle="-.")
             plt.plot(x, _avgs, label="average", linestyle="-")
-            plt.legend()
+            plt.legend(framealpha=0.3)
             plt.savefig(os.path.join(plot_folder, f'cluster-size-v-{operation}.png'))
             plt.close()
 
@@ -279,7 +288,7 @@ class Analyzer:
                 plt.plot(x, _mins, label="minimum", linestyle="--")
                 plt.plot(x, _maxes, label="maximum", linestyle="-.")
                 plt.plot(x, _avgs, label="average", linestyle="-")
-                plt.legend()
+                plt.legend(framealpha=0.3)
                 plt.savefig(os.path.join(plot_folder, f'bucket-size-vs-{operation}.png'))
                 plt.close()
 
@@ -301,7 +310,7 @@ class Analyzer:
                 _avgs.append(data['avg'])
             _avgs = np.array(_avgs)
             plt.plot(x, _avgs, label=f'{operation} avg latency', linestyle="-.")
-        plt.legend()
+        plt.legend(framealpha=0.3)
         plt.savefig(os.path.join(plot_folder, f'durability-vs-operations.png'))
         plt.close()
 
@@ -452,7 +461,7 @@ class Analyzer:
         with open(os.path.join(plot_folder, f'operation_type.txt'), 'w') as f:
             f.write(table)
 
-    def plot(self):
+    def plot_homogeneous_tests(self):
         stats = self.get_overall_stats()
         self.info("Generating plots...")
         with yaspin().white.bold.shark.on_blue as sp:
@@ -466,3 +475,606 @@ class Analyzer:
                 self.generate_line_graphs_cluster_size_v_latency(stats, operation=op)
                 self.generate_line_graphs_bucket_size_v_latency(stats, operation=op)
                 self.generate_line_graph_durability_v_latency(stats,operation=op)
+
+    def file_lines_that_contain(self, string, fname):
+        try:
+            with open(fname, 'r') as fp:
+                return [line for line in fp if string in line]
+        except:
+            return []
+
+    def collect_ycsb_stats_to_json(self):
+        """ Use the Raw measurement data from YCSB to generate a
+        dictionary of aggregated data """
+        ycsb_data_folder = os.path.join(os.path.dirname(
+            os.path.abspath(__file__)),'data','ycsb-results-archive-1Kv100K')
+
+
+        latency_by_record_count = {}
+        latency_by_field_count = {}
+        latency_by_field_length = {}
+        latency_by_request_distribution = {}
+
+        for data_file in os.listdir(ycsb_data_folder):
+            file_pointer = os.path.join(ycsb_data_folder, data_file)
+            # data file name format:
+            # csz<CLUSTER_SIZE>-rc<RECORD_COUNT>-fc<FIELD_COUNT>-fl<FIELD_LENGTH_BYTES>-
+            # rd<REQUEST_DISTRIBUTION>-r<READ_PROPORTION>-u<UPDATE_PROPORTION>-
+            # s<SCAN_PROPORTION>-i<INSERT_PROPORTION>
+            param_value_pairs = data_file.split('-')
+            cluster_size = param_value_pairs[0].split('csz')[-1]
+
+            # initialize each key's value to empty dict, format will be
+            # Key = READPROPORTION-UPDATEPROPORTION-INSERTPROPORTION
+            # Value = {
+            #   'read':  {percentile:[latency_list...], percentile: [latency_list]}
+            #   'update':  {percentile:[latency_list...], percentile: [latency_list]}
+            #   'insert': {percentile:[latency_list...], percentile: [latency_list]}
+            # }
+
+            # Data set size
+            record_count = int(param_value_pairs[1].split('rc')[-1])
+            if record_count not in latency_by_record_count:
+                 # How does tail latency of each operation type change with record count?
+                latency_by_record_count[record_count] = {}
+
+            field_count = int(param_value_pairs[2].split('fc')[-1])
+            if field_count not in latency_by_field_count:
+                # How does tail latency of each operation type change with field count?
+                latency_by_field_count[field_count] = {}
+
+            field_length = int(param_value_pairs[3].split('fl')[-1])
+            if field_length not in latency_by_field_length:
+                # How does tail latency of each operation type change with field length?
+                latency_by_field_length[field_length] = {}
+
+            # Request distribution
+            request_distribution = param_value_pairs[4].split('rd')[-1]
+            if request_distribution not in latency_by_request_distribution:
+                # How does tail latency of each operation type change with request distribution?
+                latency_by_request_distribution[request_distribution] = {}
+
+            # Operation Proportions
+            read_proportion = float(param_value_pairs[5].split('r')[-1])
+            update_proportion = float(param_value_pairs[6].split('u')[-1])
+            insert_proportion = float(param_value_pairs[8].split('i')[-1].replace('.data',''))
+            op_proportions_key = f'{read_proportion}-{update_proportion}-{insert_proportion}'
+
+            init_percentiles_dict = {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]}
+            init_op_latencies_for_current_proportions = {
+                    'read': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]},
+                    'insert': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]},
+                    'update': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]}
+                }
+
+            if op_proportions_key not in latency_by_record_count[record_count]:
+                latency_by_record_count[record_count][op_proportions_key] = {
+                    'read': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]},
+                    'insert': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]},
+                    'update': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]}
+                }
+
+            if op_proportions_key not in latency_by_field_length[field_length]:
+                latency_by_field_length[field_length][op_proportions_key] = {
+                    'read': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]},
+                    'insert': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]},
+                    'update': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]}
+                }
+
+            if op_proportions_key not in latency_by_field_count[field_count]:
+                latency_by_field_count[field_count][op_proportions_key] = {
+                    'read': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]},
+                    'insert': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]},
+                    'update': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]}
+                }
+
+            if op_proportions_key not in latency_by_request_distribution[request_distribution]:
+                latency_by_request_distribution[request_distribution][op_proportions_key] = {
+                    'read': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]},
+                    'insert': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]},
+                    'update': {'90':[], '95':[], '99':[], '99.9':[], '99.99':[]}
+                }
+
+            for percentile in ['90', '95', '99', '99.9', '99.99']:
+                # We should only be interested in this latency information if
+                #
+                try:
+                    read_microseconds_tail_latency = int(self.file_lines_that_contain(
+                        f'[READ], p{percentile}',
+                        file_pointer
+                    )[0].split(', ')[-1])
+                except Exception as e:
+                    self.error(f'{e}, setting read_microseconds_tail_latency = None ')
+                    # did not execute any read operations in this file
+                    read_microseconds_tail_latency = None
+                try:
+                    insert_microseconds_tail_latency = int(self.file_lines_that_contain(
+                        f'[INSERT], p{percentile}',
+                        file_pointer
+                    )[0].split(', ')[-1])
+                except Exception as e:
+                    self.error(f'{e}, setting insert_microseconds_tail_latency = None ')
+                    # did not execute any insert operations in this file
+                    insert_microseconds_tail_latency = None
+                try:
+                    update_microseconds_tail_latency = int(self.file_lines_that_contain(
+                        f'[UPDATE], p{percentile}',
+                        file_pointer
+                    )[0].split(', ')[-1])
+                except Exception as e:
+                    self.error(f'{e}, setting update_microseconds_tail_latency = None ')
+                    # did not execute any update operations in this file
+                    update_microseconds_tail_latency = None
+
+                for op, latency in {
+                    'read': read_microseconds_tail_latency,
+                    'update': update_microseconds_tail_latency,
+                    'insert': insert_microseconds_tail_latency
+                    }.items():
+                    # if record_count == 1000 and field_count == 10 and field_length == 10 and request_distribution == 'uniform':
+                    latency_by_record_count[record_count][op_proportions_key][op][percentile].append(latency)
+                    latency_by_field_length[field_length][op_proportions_key][op][percentile].append(latency)
+                    latency_by_field_count[field_count][op_proportions_key][op][percentile].append(latency)
+                    latency_by_request_distribution[request_distribution][op_proportions_key][op][percentile].append(latency)
+
+                    # Each of the above dicts should look something like, e.g. for latency_by_record_count
+                    # {
+                    #   1000: { # 1000 records
+                    #       '0.9-0.1-0': { # ratio key
+                    #           'read': {
+                        #           '90': [...latencies...],
+                        #           '95': [...latencies...],,
+                        #           '99': [...latencies...],
+                        #           '99.9': [...latencies...],
+                        #           '99.99': [...latencies...],
+                        #           },
+                        #       'update': {
+                        #           '90': [...latencies...],
+                        #           '95': [...latencies...],,
+                        #           '99': [...latencies...],
+                        #           '99.9': [...latencies...],
+                        #           '99.99': [...latencies...],
+                        #           },
+                        #        'insert': {
+                        #           '90': [...latencies...],
+                        #           '95': [...latencies...],,
+                        #           '99': [...latencies...],
+                        #           '99.9': [...latencies...],
+                        #           '99.99': [...latencies...],
+                    #           }
+                    #       }
+                    #   }
+                    # }
+
+        latencies = {
+            'by_record_count': latency_by_record_count,
+            'by_field_length': latency_by_field_length,
+            'by_field_count': latency_by_field_count,
+            'by_request_distribution': latency_by_request_distribution
+
+        }
+        return latencies
+
+    def _plot_ycsb_variable_v_tail_latencies_for_operation(self, ycsb_stats=None, plot_folder='', operation='read', variable=""):
+        """
+        Plot a scatter plot showing relationship between [record_count, field_length, field_count, request_distribution]
+         and tail latency for a specific operation [read, update, insert]
+        x = variable [record_count, field_length, field_count, request_distribution]
+        y = latency
+        color of dots = percentile
+        For the operation latency data, use the latency data where the proportion for that operation was 100%
+        """
+        data_key = f'by_{variable}'
+        plot_file_name = f'{plot_folder}/{variable}-vs-tail-latency-{operation}.png'
+        if variable == "record_count":
+            pretty_name = f'Record Count'
+        elif variable == "field_length":
+            pretty_name = f'Field Length'
+        elif variable == "field_count":
+            pretty_name = f'Field Count'
+        elif variable == "request_distribution":
+            pretty_name = f'Request Distribution'
+        elif variable == "operation_proportion":
+            pretty_name = "Operation Proportion"
+        else:
+            self.error('You must use one of the following values for the variable parameter: [record_count, field_length, field_count, request_distribution]')
+
+        if operation == "read":
+            proportion_key = "1.0-0.0-0.0"
+        elif operation == "update":
+            proportion_key = "0.0-1.0-0.0"
+        elif operation == "insert":
+            proportion_key = "0.0-0.0-1.0"
+
+        data = ycsb_stats[data_key]
+        x_values = data.keys()
+        y_values_90 = []
+        y_values_95 = []
+        y_values_99 = []
+        y_values_99_9 = []
+        y_values_99_99 = []
+
+
+        for i, key in enumerate(x_values):
+            y_values_90.append(data[key][proportion_key][operation]["90"])
+            y_values_95.append(data[key][proportion_key][operation]["95"])
+            y_values_99.append(data[key][proportion_key][operation]["99"])
+            y_values_99_9.append(data[key][proportion_key][operation]["99.9"])
+            y_values_99_99.append(data[key][proportion_key][operation]["99.99"])
+
+
+        fig = plt.figure()
+        ax = fig.add_subplot()
+        ax.set_ylabel(u'Tail Latency (\u03bcs)') # microseconds
+        ax.set_xlabel(pretty_name)
+
+        for xe, ye in zip(x_values, y_values_90):
+            ax.scatter([xe] * len(ye), ye, color='b', label='90%')
+        for xe, ye in zip(x_values, y_values_95):
+            ax.scatter([xe] * len(ye), ye, color='g', label='95%')
+        for xe, ye in zip(x_values, y_values_99):
+            ax.scatter([xe] * len(ye), ye, color='r', label='99%')
+        for xe, ye in zip(x_values, y_values_99_9):
+            ax.scatter([xe] * len(ye), ye, color='c', label='99.9%')
+        for xe, ye in zip(x_values, y_values_99_99):
+            ax.scatter([xe] * len(ye), ye, color='m', label='99.99%')
+
+        # plt.tight_layout()
+        handles, labels = plt.gca().get_legend_handles_labels()
+        by_label = OrderedDict(zip(labels, handles))
+        plt.legend(by_label.values(), by_label.keys(), framealpha=0.3)
+        try:
+            ax.set_xticks([x for x in x_values])
+        except:
+            ax.set_xticklabels([x for x in x_values])
+        # plt.xticks([i for i in range(len(x_values))])
+        # plt.axes().set_xticklabels([v for v in x_values])
+
+
+        plt.title(f'{pretty_name} vs. Tail Latency of {operation} in Couchbase')
+        plt.savefig(plot_file_name)
+
+    def plot_by_operation_proportion(self, ycsb_stats=None, plot_folder=''):
+        """ Create one line plot per percentile
+        x = operation proportion
+        y = tail latencies for that operation type
+        one line showing how average operation latency changes with RUI ratio where average encompasses all operations """
+
+        all_operation_proportions = ycsb_stats['by_record_count'][1000].keys()
+        x_values = list(all_operation_proportions)
+        self.info(f'all operation proportions: {all_operation_proportions}')
+
+        for percentile in ['90', '95', '99', '99.9', '99.99']:
+            fig = plt.figure(figsize=(5,6))
+            ax = fig.add_subplot()
+            plt.xticks(rotation = 65) # Rotates X-Axis Ticks by 45-degrees
+            ax.set_ylabel(f'{percentile}th % ' + u'Latency (\u03bcs)') # microseconds
+            plot_file_name = f'{plot_folder}/op-proportion-vs-tail-latency-{percentile}-percentile.png'
+            ax.set_title(f'Operation Proportion vs Avg {percentile}th\nPercentile Latency (all operations)')
+
+            avg_tails_for_this_percentile = []
+            for op_proportion in all_operation_proportions:
+                all_avgs = []
+                # If a given operation has a 0% proportion, append 0
+                try:
+                    read_avg = avg(ycsb_stats['by_request_distribution']['uniform'][op_proportion]['read'][percentile])
+                except:
+                    read_avg = None
+                try:
+                    insert_avg = avg(ycsb_stats['by_request_distribution']['uniform'][op_proportion]['insert'][percentile])
+                except:
+                    insert_avg = None
+                try:
+                    update_avg = avg(ycsb_stats['by_request_distribution']['uniform'][op_proportion]['update'][percentile])
+                except:
+                    update_avg = None
+                all_avgs.append(read_avg)
+                all_avgs.append(update_avg)
+                all_avgs.append(insert_avg)
+                avg_tails_for_this_percentile.append(avg(all_avgs))
+
+            plt.tight_layout()
+            plt.plot(x_values, avg_tails_for_this_percentile, label=f'Avg operation latency', color='b', linestyle=':')
+            plt.legend()
+            plt.savefig(plot_file_name, bbox_inches = 'tight')
+
+
+    def plot_ycsb_stats(self, ycsb_stats=None):
+        """ Take the YCSB stats generated by collect_ycsb_stats_to_json and generate plots """
+        if not ycsb_stats:
+            self.error("You need to provide ycsb_stats dictionary as argument")
+            return None
+        plot_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)),'plots','ycsb')
+        self.init_plot_folder(plot_folder)
+        for op in ['read', 'update', 'insert']:
+            for variable in ['record_count', 'field_length', 'field_count', 'request_distribution']:
+                self._plot_ycsb_variable_v_tail_latencies_for_operation(
+                    ycsb_stats=ycsb_stats,
+                    plot_folder=plot_folder,
+                    operation=op,
+                    variable=variable)
+        self.plot_by_operation_proportion(ycsb_stats=ycsb_stats, plot_folder=plot_folder)
+
+
+    def get_service_layout_latencies(self,   ):
+        """ Collect latencies related to service layout impact testing. Data is housed in a known single folder:
+        data/durability-medium/cluster-size-5/multidim-scaling-test-bucket.
+        Return stats dictionary showing high-percentile/tail latencies of each main operation type as the 3 different
+        services (query, index, fts) scale from 1 to 4 nodes.
+
+        query & index services interdependent, could not be tested independently, so test results are exact same for those.
+        data service must run on every node regardless in CE, so could not be used as independent variable.
+        """
+
+        # These keys are the folders containing data for the query service scaling impact test.
+        query_service_scaling_folders = {
+            'ALL-1query1index1dataREMAININGdata': {
+                'query': 1,
+                'index': 1,
+                'data': 1
+            },
+            'ALL-2query2index2dataREMAININGdata': {
+                'query': 2,
+                'index': 2,
+                'data': 2
+            },
+            'ALL-3query3index3dataREMAININGdata': {
+                'query': 3,
+                'index': 3,
+                'data': 3
+            },
+            'ALL-4query4index4dataREMAININGdata' : {
+                'query': 4,
+                'index': 4,
+                'data': 4
+            }
+        }
+        # Data for the index service scaling impact test is same as query service scaling test
+        #  because query and index are interdependent. Could not be tested independently.
+
+
+        # These keys are the folders containing data for the FTS service scaling impact test.
+        fts_service_scaling_folders = {
+            'ALL-1fts1query1index1dataREMAININGquery-index-data': {
+                'fts': 1,
+                'query': 1,
+                'index': 1,
+                'data': 1
+            },
+            'ALL-2fts2query2index2dataREMAININGquery-index-data': {
+                'fts': 2,
+                'query': 2,
+                'index': 2,
+                'data': 2
+            },
+            'ALL-3fts3query3index3dataREMAININGquery-index-data': {
+                'fts': 3,
+                'query': 3,
+                'index': 3,
+                'data': 3
+            },
+            'ALL-4fts4query4index4dataREMAININGquery-index-data': {
+                'fts': 4,
+                'query': 4,
+                'index': 4,
+                'data': 4
+            }
+        }
+        stats = {}
+        for operation in ['delete', 'fts', 'insert', 'n1qlselect', 'update']:
+            try:
+                stats[operation] = {
+                    'query-service-scaling-test': {},
+                    'index-service-scaling-test': {},
+                    'fts-service-scaling-test': {},
+                }
+                for folder_name, service_counts in query_service_scaling_folders.items():
+                    latencies_data_file = os.path.join(
+                        os.path.dirname(
+                            os.path.abspath(__file__)),
+                            'data',
+                            'durability-medium',
+                            'cluster-size-5',
+                            'multidim-scaling-test-bucket',
+                            operation,
+                            folder_name,
+                            'latencies.txt')
+                    with open(latencies_data_file) as f:
+                        latencies = [float(l) for l in f.readlines()]
+                    query_service_count = service_counts['query']
+                    stats[operation]['query-service-scaling-test'][query_service_count] = {
+                        90: np.percentile(latencies, 90),
+                        95: np.percentile(latencies, 95),
+                        99: np.percentile(latencies, 99),
+                        99.9: np.percentile(latencies, 99.9),
+                        99.99: np.percentile(latencies, 99.99),
+                    }
+                # Again, index test was the exact same, which makes one of these two irrelevant.
+                stats[operation]['index-service-scaling-test'] = stats[operation]['query-service-scaling-test'].copy()
+
+                for folder_name, service_counts in fts_service_scaling_folders.items():
+                    latencies_data_file = os.path.join(
+                        os.path.dirname(
+                            os.path.abspath(__file__)),
+                            'data',
+                            'durability-medium',
+                            'cluster-size-5',
+                            'multidim-scaling-test-bucket',
+                            operation,
+                            folder_name,
+                            'latencies.txt')
+                    with open(latencies_data_file) as f:
+                        latencies = [float(l) for l in f.readlines()]
+                    fts_service_count = service_counts['fts']
+                    stats[operation]['fts-service-scaling-test'][fts_service_count] = {
+                        90: np.percentile(latencies, 90),
+                        95: np.percentile(latencies, 95),
+                        99: np.percentile(latencies, 99),
+                        99.9: np.percentile(latencies, 99.9),
+                        99.99: np.percentile(latencies, 99.99),
+                    }
+            except Exception as e:
+                self.error(e)
+                self.error(f'Skipping operation {operation}')
+
+        return stats
+
+    def plot_service_layout_impact_stats(self, service_layout_impact_stats={}):
+        """ Plot graphs showing the impact of scaling the FTS, Query, and Index services. Query and Index will look the same
+        because they could not be isolated from each other for independent testing. Data service not included because data
+        service must run on all nodes in CE of coucbase, could not be scaled from 1 to 4 nodes.
+        Stats structure:
+        {
+            'delete': {
+                'query-service-scaling-test': {
+                    1: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                    2: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                    3: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                    4: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                },
+                'index-service-scaling-test':{
+                    1: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                    2: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                    3: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                    4: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                },
+                'fts-service-scaling-test':{
+                    1: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                    2: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                    3: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                    4: {
+                        90: 90 percentile latency value,
+                        95: 95 percentile latency value,
+                        99: 99 percentile latency value,
+                        99.9: 99.9 percentile latency value,
+                        99.99: 99.99 percentile latency value
+                    },
+                },
+            },
+            etc. for each operation....
+        }
+        """
+
+        # Plot one multiline graph per service per operation. One line style per percentile. Y axis = latency. X axis is number of nodes running that service.
+        # 5 operations times 3 services = 15 line egraphs, each with 5 lines.
+        plot_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)),'plots','service-layout-impact')
+        self.init_plot_folder(plot_folder)
+        for svc in ['query', 'index', 'fts']:
+            for operation in ['delete', 'fts', 'insert', 'n1qlselect', 'update']:
+                try:
+                    fig = plt.figure()
+                    ax = fig.add_subplot()
+                    if svc in ['query', 'index']: # tests are interdependent, not able to be isolated; consider together
+                        svc_name = 'Query & Index'
+                    else:
+                        svc_name = 'FTS'
+                    ax.set_title(
+                        f'Effect of Horizontally Scaling {svc_name} Service \non '
+                        f'{operation.capitalize()} Operation Tail Latency in Couchbase')
+                    ax.set_xlabel(f'# Nodes Running {svc.capitalize()} Service')
+                    ax.set_ylabel(u'Latency (\u03bcs)') # microseconds
+                    # e.g. [1, 2, 3, 4] -> how many nodes service ran on for that iteration
+                    x_values = list(service_layout_impact_stats[operation][f'{svc}-service-scaling-test'].keys())
+
+                    colors = ['b','g','r','c','m']
+                    for i, percentile in enumerate([90, 95, 99, 99.9, 99.99]):
+                        y_values = [
+                            service_layout_impact_stats[operation][f'{svc}-service-scaling-test'][x][percentile] * (10**6) for x in x_values
+                        ]
+                        plt.plot(x_values, y_values, label=f'{percentile}th percentile', color=colors[i], linestyle="-.")
+                    plt.legend(framealpha=0.3)
+                    plt.tight_layout()
+                    plt.savefig(f'{plot_folder}/scaling-{svc}-v-{operation}-op.png')
+                    plt.close()
+                except Exception as e:
+                    self.error(e)
+                    self.error(f'Skipping operation/svc combo: {operation}/{svc}')
+
+
+
+
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    analyzer = Analyzer(verbose=True)
+    ycsb_stats = analyzer.collect_ycsb_stats_to_json()
+    # output_json_file = os.path.join(
+    #         os.path.dirname(os.path.abspath(__file__)),
+    #         'data','ycsb-stats.json')
+    # with open(output_json_file, 'w') as f:
+    #     json.dump(ycsb_stats , f)
+    analyzer.plot_ycsb_stats(ycsb_stats=ycsb_stats)
+
+    service_layout_stats = analyzer.get_service_layout_latencies()
+    analyzer.plot_service_layout_impact_stats(service_layout_impact_stats=service_layout_stats)

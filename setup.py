@@ -32,7 +32,8 @@ class Setup:
                 for i in instances:
                     addresses.append({
                         'public': i['PublicIpAddress'],
-                        'private': i['PrivateIpAddress']
+                        'private': i['PrivateIpAddress'],
+                        'dns': i['PublicDnsName']
                     })
         return addresses
 
