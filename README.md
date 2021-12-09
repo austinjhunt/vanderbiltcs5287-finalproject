@@ -6,7 +6,8 @@ This project is a Python-driven evaluation of [Couchbase](https://www.couchbase.
 * [Ansible](https://docs.ansible.com/) for the automated provisioning and configuration of AWS EC2 infrastructure (i.e. EC2 instances)
 * [Vagrant by HashiCorp](https://www.vagrantup.com/) for quickly and easily spinning up a local VirtualBox VM (using the `ubuntu/focal64` that can be used as a controller for remote cloud VMs
 * [AWS EC2](https://www.vagrantup.com/) for hosting the various cloud Couchbase clusters (say *that* three times fast)
-* The [Yahoo! Cloud Serving Benchmark](https://github.com/brianfrankcooper/YCSB/tree/master/couchbase2) project for automated load testing against the Couchbase cluster.
+* [Couchbase-related components of the YCSB project](https://github.com/brianfrankcooper/YCSB/tree/master/couchbase2) for running automated workloads against various Couchbase databases. Using YCSB, we can fine tune variables like the ratio between read and update operations, request distributions, field counts, field sizes, and overall dataset sizes. For more information about YCSB, please read [this 2010 announcement from Yahoo! about the project.](https://research.yahoo.com/news/yahoo-cloud-serving-benchmark/)
+
 * The [Python 3 SDK for Couchbase](https://docs.couchbase.com/python-sdk/current/hello-world/start-using-sdk.html) to programmatically adjust cluster configuration within the test scaffolding. [This article](https://docs.couchbase.com/python-sdk/2.5/managing-clusters.html) explains how the SDK can be used for cluster configuration management.
 * The [Couchbase CLI](https://docs.couchbase.com/server/current/cli/cli-intro.html) to do things that cannot be done with the Python3 SDK, like much of the [Cluster Architecture Management (ClusterManager.py)](src/lib/ClusterManager.py).
 * And of course, [Couchbase](https://www.couchbase.com/) as the target data store.
@@ -64,7 +65,3 @@ This will create 5 EC2 instances (t2.xlarge) and install Couchbase on each of th
 
 12. Wait :)
 13. Once tests start executing, you will be able to see data files being produced since the tests will be executing on the Vagrant VM, and that VM is mounted to the project folder. Keep an eye on the `src/lib/data` folder; that's where the raw data gets written, which is used for the plotting.
-
-## [YCSB (Yahoo! Cloud Serving Benchmark)](https://github.com/brianfrankcooper/YCSB)
-We use the [couchbase-related components of the YCSB project](https://github.com/brianfrankcooper/YCSB/tree/master/couchbase2) to run automated workloads against our created database. Using YCSB, we can fine tune variables like the ratio between read and update operations, request distributions, field counts, field sizes, and overall dataset sizes.
-For more information about YCSB, please read [this 2010 announcement from Yahoo! about the project.](https://research.yahoo.com/news/yahoo-cloud-serving-benchmark/)
